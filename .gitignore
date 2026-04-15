@@ -1,0 +1,36 @@
+# Dependency directories
+node_modules/
+jspm_dependencies/
+
+# Hardhat / Solidity artifacts and cache
+artifacts/
+cache/
+deploy_output.log
+hardhat_node.log
+hardhat_node.pid
+bridge.pid
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+middleware/bridge.log
+middleware/middleware/bridge.log
+middleware/middleware/middleware/crash_log.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment/temp
+.claude/

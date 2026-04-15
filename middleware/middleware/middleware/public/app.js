@@ -1,0 +1,106 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const refreshBtn = document.getElementById('refresh-btn');
+    const tableBody = document.getElementById('threat-table-body');
+    const totalThreatsCounter = document.getElementById('total-threats-counter');
+    const criticalCounter = document.getElementById('critical-counter');
+
+    async function fetchLogs() {
+        // UI Loading state
+        refreshBtn.classList.add('syncing');
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="6" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Querying decentralized ledger...</p>
+                </td>
+            </tr>
+        `;
+
+        try {
+            const response = await fetch('/api/logs');
+            if (!response.ok) throw new Error('API fetch failed');
+            
+            const logs = await response.json();
+            
+            // Render logs
+            tableBody.innerHTML = '';
+            
+            if (logs.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No threat records found in the ledger.</td></tr>`;
+            } else {
+                let criticalCount = 0;
+
+                logs.forEach(log => {
+                    const dl = parseInt(log.dangerLevel);
+                    if (dl >= 4) criticalCount++;
+
+                    let severityBadge = '';
+                    if (dl >= 4) {
+                        severityBadge = '<span class="badge badge-critical">🚨 CRITICAL</span>';
+                    } else if (dl === 3) {
+                        severityBadge = '<span class="badge badge-high">🟠 HIGH</span>';
+                    } else if (dl === 2) {
+                        severityBadge = '<span class="badge badge-medium">🟡 MEDIUM</span>';
+                    } else {
+                        severityBadge = '<span class="badge badge-low">🔵 LOW</span>';
+                    }
+
+                    const date = new Date(parseInt(log.timestamp) * 1000).toLocaleString();
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="mono">#${log.id}</td>
+                        <td>${date}</td>
+                        <td class="mono">${log.deviceId}</td>
+                        <td class="mono">${log.attackerIP}</td>
+                        <td>${log.attackType}</td>
+                        <td>${severityBadge}</td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+
+                // Update Metrics Counters
+                // We fetch the number from the API response length, but if you want true total, we can use an endpoint, 
+                // but since /api/logs returns the latest logs, we can just display the length for now, 
+                // or if it was > 50, it limits it. Here we just show the array length.
+                animeCounter(totalThreatsCounter, logs.length);
+                animeCounter(criticalCounter, criticalCount);
+            }
+        } catch (error) {
+            console.error(error);
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="loading-state" style="color: var(--danger);">
+                        ❌ Failed to sync with blockchain. Node might be offline.
+                    </td>
+                </tr>
+            `;
+        } finally {
+            refreshBtn.classList.remove('syncing');
+        }
+    }
+
+    // Simple counter animation
+    function animeCounter(element, target) {
+        let current = 0;
+        const speed = 20; 
+        const inc = Math.ceil(target / speed) || 1;
+        
+        const updateCount = () => {
+            current += inc;
+            if (current < target) {
+                element.innerText = current;
+                setTimeout(updateCount, 40);
+            } else {
+                element.innerText = target;
+            }
+        };
+        updateCount();
+    }
+
+    // Bind events
+    refreshBtn.addEventListener('click', fetchLogs);
+
+    // Initial load
+    fetchLogs();
+});
