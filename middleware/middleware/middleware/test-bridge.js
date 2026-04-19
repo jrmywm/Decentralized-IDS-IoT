@@ -15,7 +15,8 @@ async function simulateAttack() {
   };
 
   const payloadBase64 = Buffer.from(JSON.stringify(mockAttack)).toString('base64');
-  const secretToken = process.env.HEC_SECRET_TOKEN || "your_secret_token_here";
+  // const secretToken = process.env.HEC_SECRET_TOKEN || "your_secret_token_here";
+const secretToken = "your_secret_token_here";
 
   console.log(`Simulating attack from ${mockAttack.attackerIP}...`);
 
@@ -32,7 +33,8 @@ async function simulateAttack() {
     // 3. Verify on the Blockchain
     console.log("Verifying on-chain record...");
     const ThreatRegistry = await hre.ethers.getContractFactory("ThreatRegistry");
-    const registry = await ThreatRegistry.attach(process.env.CONTRACT_ADDRESS);
+    // const registry = await ThreatRegistry.attach(process.env.CONTRACT_ADDRESS);
+    const registry = await ThreatRegistry.attach("0x5FbDB2315678afecb367f032d93F642f64180aa3");
 
     const totalLogs = await registry.getTotalLogs();
     console.log(`Total logs on-chain: ${totalLogs}`);

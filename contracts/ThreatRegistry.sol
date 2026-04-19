@@ -1,16 +1,16 @@
-/**
- * @title ThreatRegistry
- * @dev Immutable storage for IoT Honeypot threat logs on Polygon
- */
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
+
+    // Konfigurasi Reward
+    IERC20 public rewardToken;
+    uint256 public rewardAmount = 10 * 10**18; // Default 10 koin
 
     struct ThreatLog {
         uint256 id;
@@ -21,20 +21,17 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
         string deviceId;
     }
 
-    // Mapping of authorized reporter addresses (the Middleware/Bridge wallets)
     mapping(address => bool) public authorizedReporters;
-
-    // Store all threat logs in an array
     ThreatLog[] public threatLogs;
 
-    // Events for real-time monitoring
     event ThreatLogged(uint256 indexed logId, string indexed attackerIP, string attackType, uint8 dangerLevel);
     event ReporterAdded(address indexed reporter);
     event ReporterRemoved(address indexed reporter);
+    event RewardSent(address indexed reporter, uint256 amount);
 
-    constructor() {
-        // The deployer is the initial owner and authorized reporter
+    constructor(address _tokenAddress) {
         authorizedReporters[msg.sender] = true;
+        rewardToken = IERC20(_tokenAddress);
     }
 
     modifier onlyAuthorized() {
@@ -43,11 +40,7 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @dev Log a new threat. Only authorized reporters can call this.
-     * @param _attackerIP The IP address of the attacker
-     * @param _attackType The type of attack (e.g., "SSH Brute Force")
-     * @param _dangerLevel The severity level (1-4)
-     * @param _deviceId The unique ID of the ESP32 device
+     * @dev Mencatat ancaman dan memberikan reward koin
      */
     function logThreat(
         string calldata _attackerIP,
@@ -66,26 +59,28 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
             deviceId: _deviceId
         }));
 
+        // Logika Pengiriman Reward
+        if (address(rewardToken) != address(0) && rewardToken.balanceOf(address(this)) >= rewardAmount) {
+            rewardToken.transfer(msg.sender, rewardAmount);
+            emit RewardSent(msg.sender, rewardAmount);
+        }
+
         emit ThreatLogged(logId, _attackerIP, _attackType, _dangerLevel);
         return logId;
     }
 
-    /**
-     * @dev Retrieve a specific log by ID
-     */
+    // --- Fungsi View ---
+
     function getLog(uint256 _id) external view returns (ThreatLog memory) {
         require(_id < threatLogs.length, "ThreatRegistry: Log ID does not exist");
         return threatLogs[_id];
     }
 
-    /**
-     * @dev Get total number of logs stored
-     */
     function getTotalLogs() external view returns (uint256) {
         return threatLogs.length;
     }
 
-    // --- Access Control Functions ---
+    // --- Fungsi Administrasi (Owner Only) ---
 
     function addReporter(address _reporter) external onlyOwner {
         authorizedReporters[_reporter] = true;
@@ -95,6 +90,10 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
     function removeReporter(address _reporter) external onlyOwner {
         authorizedReporters[_reporter] = false;
         emit ReporterRemoved(_reporter);
+    }
+
+    function updateRewardAmount(uint256 _newAmount) external onlyOwner {
+        rewardAmount = _newAmount;
     }
 
     function pause() external onlyOwner {

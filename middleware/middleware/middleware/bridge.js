@@ -4,14 +4,13 @@ import { ethers } from 'ethers';
 import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-
 import { fileURLToPath } from 'url';
 
-// Ensure .env is explicitly loaded from the correct relative path
-dotenv.config({ path: path.resolve('middleware/middleware/middleware/.env') });
-
+// Inisialisasi __filename dan __dirname lebih dulu
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 app.use(bodyParser.json());
@@ -25,18 +24,38 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const SECRET_TOKEN = process.env.HEC_SECRET_TOKEN;
+// const SECRET_TOKEN = process.env.HEC_SECRET_TOKEN;
+const SECRET_TOKEN = "your_secret_token_here";
 
 const CONTRACT_ABI = [
   "function logThreat(string _attackerIP, string _attackType, uint8 _dangerLevel, string _deviceId) external returns (uint256)",
-  "function getLog(uint256 _id) external view returns (tuple(uint256 id, uint256 timestamp, string attackerIP, string attackType, uint8 dangerLevel, string deviceId))",
+ "function getLog(uint256 _id) external view returns (tuple(uint256, uint256, string, string, uint8, string))",
   "function getTotalLogs() external view returns (uint256)",
-  "event ThreatLogged(uint256 indexed logId, string indexed attackerIP, string attackType, uint8 dangerLevel)"
+  "event ThreatLogged(uint256 indexed logId, string indexed attackerIP, string attackType, uint8 dangerLevel)",
+  "event RewardSent(address indexed reporter, uint256 amount)"
 ];
 
+
+// Debug: Log PRIVATE_KEY value (do not do this in production!)
+console.log("[DEBUG] PRIVATE_KEY from env:", process.env.PRIVATE_KEY);
+if (!process.env.PRIVATE_KEY) {
+  console.warn("[WARNING] PRIVATE_KEY is undefined. Check your .env file and dotenv.config() path.");
+}
+if (process.env.PRIVATE_KEY && !/^0x[a-fA-F0-9]{64}$/.test(process.env.PRIVATE_KEY.trim())) {
+  console.warn("[WARNING] PRIVATE_KEY format is invalid. It should be a 66-character hex string starting with 0x.");
+}
+
 const provider = new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL || "http://127.0.0.1:8545");
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", provider);
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3", CONTRACT_ABI, wallet);
+
+const rawKey = process.env.PRIVATE_KEY || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const cleanPrivateKey = rawKey.trim();
+
+console.log("[DEBUG] PRIVATE_KEY ditemukan:", cleanPrivateKey.substring(0, 6) + "...");
+console.log("[DEBUG] Panjang Private Key:", cleanPrivateKey.length);
+
+const wallet = new ethers.Wallet(cleanPrivateKey, provider);
+
+const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", CONTRACT_ABI, wallet);
 
 // --- TRANSACTION QUEUE SYSTEM ---
 // Prevents nonce collisions during high-frequency webhook spam (Denial of Wallet mitigation)

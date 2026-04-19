@@ -1,99 +1,100 @@
-# Project Demo Guide: Decentralized IoT Honeypot & Threat Registry
-
-This document serves as a step-by-step guide to demonstrating the end-to-end flow of the IoT threat detection and blockchain logging system.
-
-## 1. System Architecture Overview
-The system consists of three primary layers:
-1. **IoT Trigger (Simulated)**: An ESP32 device detects a threat and sends a base64-encoded payload via a webhook.
-2. **Middleware Bridge (Node.js)**: 
-   - Authenticates the request using a secret token.
-   - Decodes the IoT payload.
-   - Interfaces with the Ethereum-compatible blockchain using `ethers.js`.
-3. **Threat Registry (Smart Contract)**: An immutable ledger that stores threat details (Device ID, Attacker IP, Attack Type, and Severity).
+# Project Documentation & Demonstration Guide
+## **Decentralized IoT Honeypot & Threat Registry**
 
 ---
 
-## 2. Demo Setup (Pre-Flight)
+## 1. Introduction
+This project is an innovative integration of **Internet of Things (IoT)** and **Blockchain** technology designed to create a transparent, decentralized, and tamper-resistant security system.
 
-### Terminal 1: The Blockchain Node
-Start the local Ethereum node to act as the ledger.
+In traditional security ecosystems, attack logs are often vulnerable to deletion or modification by attackers who successfully breach the system. By utilizing **Smart Contracts**, every attack trace is permanently locked within the blockchain ledger, rendering it a valid and immutable piece of digital evidence.
+
+---
+
+## 2. Project Overview
+The system implements a **Honeypot-based Intrusion Detection System (IDS)**.
+
+*   **Working Mechanism:** IoT devices (such as the ESP32) act as decoys to lure attackers.
+*   **Data Flow:** Once an attack is detected, the data is sent to the Middleware, which automatically processes and records it onto the blockchain.
+
+### 🛡️ Key Feature: ISEC Coin (IoT Security Token)
+We have introduced the **ISEC (ERC-20)** coin standard as an economic incentive:
+*   **Token Reward:** Every device that successfully detects and reports a valid threat receives **10 ISEC**.
+*   **Automation:** Rewards are sent directly by the Smart Contract to the reporter's wallet as appreciation for their contribution to network security.
+
+---
+
+## 3. Demo Guide Objectives
+This guide is designed as a workflow to demonstrate the end-to-end system logic to evaluators, covering:
+1.  Attack detection.
+2.  Data processing by the middleware.
+3.  Verification of real-time coin balance mutations on the blockchain.
+
+---
+
+## 4. Technical Guide (Terminal Window Operations)
+
+Please follow these steps in order using 5 separate terminal windows.
+
+### 🪟 Window 1: Blockchain Infrastructure (The Ledger)
+**Objective:** Run a local blockchain node as the foundation for all transactions.
+**Purpose:** To activate a local RPC server that simulates an Ethereum/Polygon network.
+
 ```bash
+# Run in directory: \Decentralized-IDS-IoT
 npx hardhat node
 ```
-*Keep this window open to show real-time transaction logs.*
+> **Output:** A list of 20 testing accounts (Account #0 - #19) with their Private Keys will appear. These accounts are used to pay gas fees and receive rewards.
 
-### Terminal 2: The Middleware Bridge
-Start the bridge that connects the IoT world to the blockchain.
+---
+
+### 🪟 Window 2: Smart Contract Deployment
+**Objective:** Deploy contracts to the blockchain and provide initial coin liquidity.
+**Purpose:** To register the `ThreatRegistry` and `IoTToken` logic onto the network so the system has an official identity.
+
 ```bash
-# Navigate to the bridge directory
-cd middleware/middleware/middleware
+# Run in directory: \Decentralized-IDS-IoT
+npx hardhat run scripts/deploy.js --network localhost
+```
+> **Output:** New contract addresses and confirmation of sending 500,000 ISEC to the contract as a reward reserve.
 
-# Start the server
+---
+
+### 🪟 Window 3: Middleware Threat Bridge (Control Center)
+**Objective:** Run the intermediary server connecting IoT devices to the blockchain.
+**Purpose:** The server listens for data from webhooks, decodes the report content, and executes transactions to the Smart Contract.
+
+```bash
+# Navigate to the innermost middleware folder:
+cd \Decentralized-IDS-IoT\middleware\middleware\middleware
 node bridge.js
 ```
-*Keep this window open to show the authentication and processing logs.*
-
-### Terminal 3: The IoT Simulator
-This terminal will be used to trigger the "attack".
+> **Output:** Message `🚀 Production-grade Threat Bridge running on port 3000` and confirmation of connection to the Registry.
 
 ---
 
-## 3. The Live Demonstration Flow
+### 🪟 Window 4: IoT Simulator (The Attack Trigger)
+**Objective:** Simulate the transmission of an attack report from an IoT device.
+**Purpose:** Send a Base64 encoded data packet to the middleware for processing.
 
-### Step 1: The Threat Trigger
-Execute the following command to simulate a high-severity SQL Injection attack detected by an ESP32 device.
-
-```bash
-# Generate the base64 payload and send the request
-PAYLOAD=$(echo -n '{"deviceId": "ESP32-01", "attackerIP": "192.168.1.100", "attackType": "SQL_Injection", "dangerLevel": 4}' | base64 | tr -d '\n')
-
-curl -X POST http://localhost:3000/webhook \
-     -H "Content-Type: application/json" \
-     -H "x-helium-token: test_secret_123" \
-     -d "{\"payload\": \"$PAYLOAD\"}"
+**Use PowerShell:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3000/webhook" `
+  -Method Post `
+  -Headers @{"Content-Type" = "application/json"; "x-helium-token" = "your_secret_token_here"} `
+  -Body '{"payload": "eyJhdHRhY2tlcklQIjogIjE5Mi4xNjguMS4xMDciLCAiYXR0YWNrVHlwZSI6ICJTU0ggQnJ1dGUgRm9yY2UiLCAiZGFuZ2VyTGV2ZWwiOiAzLCAiZGV2aWNlSWQiOiAiRVNQMzJfREVWXzAxIn0="}'
 ```
-
-WINDOWS:
-```bash
-$payloadJson = '{"deviceId": "ESP32-01", "attackerIP": "192.168.1.100", "attackType": "SQL_Injection", "dangerLevel": 4}'
-  $bytes = [System.Text.Encoding]::UTF8.GetBytes($payloadJson)
-  $payloadBase64 = [Convert]::ToBase64String($bytes)
-
-  $headers = @{
-      "Content-Type" = "application/json"
-      "x-helium-token" = "test_secret_123"
-  }
-
-  $body = @{
-      payload = $payloadBase64
-  } | ConvertTo-Json
-
-  Invoke-RestMethod -Uri "http://localhost:3000/webhook" -Method Post -Headers $headers -Body $body
-
-```
-
-### Step 2: Verifying the Middleware (Terminal 2)
-Point to the logs in the Bridge terminal. The professor should see:
-- `Incoming webhook request...`
-- `Provided Token: test_secret_123`
-- `Logging threat from device ESP32-01...`
-- `Transaction confirmed on-chain!`
-
-### Step 3: Verifying the Blockchain (Terminal 1)
-Point to the Hardhat node terminal. You will see a new transaction block appearing, confirming that the data has been written to the ledger.
-
-### Step 4: Proving the State (Optional)
-Run the verification script to show the total number of recorded threats.
-```bash
-node middleware/middleware/middleware/verify-contract.js
-```
-*Expected Output: `Contract is reachable. Total logs: 1` (or more if you ran it multiple times).*
+> **Output:** `success: True`, indicating the report has been received and added to the blockchain queue.
 
 ---
 
-## 4. Key Talking Points for the Professor
+### 🪟 Window 5: Verification (Reward Check)
+**Objective:** Prove that ISEC coins have been sent automatically.
+**Purpose:** Run a script to check the reporter's wallet balance on the blockchain network.
 
-- **Immutability**: "By using a smart contract, we ensure that once a threat is logged, it cannot be deleted or altered by an attacker, creating a reliable forensic audit trail."
-- **Security**: "The middleware uses a shared secret token (`x-helium-token`) to prevent unauthorized parties from spamming the registry with fake threats."
-- **Scalability**: "While we are using a local Hardhat node for the demo, the system is designed to be deployed to a Layer 2 solution like Polygon to keep transaction costs (gas) low."
-- **IoT Integration**: "The use of base64 encoding simulates how low-power IoT devices (like those using LoRaWAN) often transmit compressed binary data to conserve energy."
+```bash
+# Run in directory: \Decentralized-IDS-IoT
+npx hardhat run checkBalance.cjs --network localhost
+```
+> **Output:** `Reporter ISEC Balance: 5000XX.0 ISEC`. 
+> 
+> *Note: Every time Window 4 is executed, this value will increase by 10 units, proving that the reward system is working perfectly.*
