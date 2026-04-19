@@ -1,29 +1,19 @@
-# Project Documentation & Demonstration Guide
-## **Decentralized IoT Honeypot & Threat Registry**
+# Project Demo Guide: Decentralized IoT Honeypot & Threat Registry
+
+This document serves as a step-by-step guide to demonstrating the end-to-end flow of the IoT threat detection and blockchain logging system.
+
+## 1. System Architecture Overview
+The system consists of three primary layers:
+1. **IoT Trigger (Simulated)**: An ESP32 device detects a threat and sends a base64-encoded payload via a webhook.
+2. **Middleware Bridge (Node.js)**: 
+   - Authenticates the request using a secret token.
+   - Decodes the IoT payload.
+   - Interfaces with the Ethereum-compatible blockchain using `ethers.js`.
+3. **Threat Registry (Smart Contract)**: An immutable ledger that stores threat details (Device ID, Attacker IP, Attack Type, and Severity).
 
 ---
 
-## 1. Introduction
-This project is an innovative integration of **Internet of Things (IoT)** and **Blockchain** technology designed to create a transparent, decentralized, and tamper-resistant security system.
-
-In traditional security ecosystems, attack logs are often vulnerable to deletion or modification by attackers who successfully breach the system. By utilizing **Smart Contracts**, every attack trace is permanently locked within the blockchain ledger, rendering it a valid and immutable piece of digital evidence.
-
----
-
-## 2. Project Overview
-The system implements a **Honeypot-based Intrusion Detection System (IDS)**.
-
-*   **Working Mechanism:** IoT devices (such as the ESP32) act as decoys to lure attackers.
-*   **Data Flow:** Once an attack is detected, the data is sent to the Middleware, which automatically processes and records it onto the blockchain.
-
-### 🛡️ Key Feature: ISEC Coin (IoT Security Token)
-We have introduced the **ISEC (ERC-20)** coin standard as an economic incentive:
-*   **Token Reward:** Every device that successfully detects and reports a valid threat receives **10 ISEC**.
-*   **Automation:** Rewards are sent directly by the Smart Contract to the reporter's wallet as appreciation for their contribution to network security.
-
----
-
-## 3. Demo Guide Objectives
+## 2. Demo Guide Objectives
 This guide is designed as a workflow to demonstrate the end-to-end system logic to evaluators, covering:
 1.  Attack detection.
 2.  Data processing by the middleware.
@@ -31,7 +21,7 @@ This guide is designed as a workflow to demonstrate the end-to-end system logic 
 
 ---
 
-## 4. Technical Guide (Terminal Window Operations)
+## 3. Technical Guide (Terminal Window Operations)
 
 Please follow these steps in order using 5 separate terminal windows.
 
