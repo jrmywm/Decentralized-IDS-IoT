@@ -89,6 +89,36 @@
                 </table>
             </div>
         </main>
+
+        <section class="metrics-grid">
+            <div class="glass-panel metric-card">
+                <h3>Current Block Details</h3>
+                <div class="details-list">
+                    <p><span>Number</span><code id="block-number">--</code></p>
+                    <p><span>Hash</span><code id="block-hash">--</code></p>
+                    <p><span>Timestamp</span><code id="block-timestamp">--</code></p>
+                    <p><span>Tx Count</span><code id="block-tx-count">--</code></p>
+                </div>
+            </div>
+            <div class="glass-panel metric-card">
+                <h3>Current Smart Contract</h3>
+                <div class="details-list">
+                    <p><span>Address</span><code id="contract-address">--</code></p>
+                    <p><span>Network</span><code id="contract-network">--</code></p>
+                    <p><span>Chain ID</span><code id="contract-chain-id">--</code></p>
+                    <p><span>Threat Logs</span><code id="contract-total-logs">--</code></p>
+                </div>
+            </div>
+            <div class="glass-panel metric-card">
+                <h3>Last Honeypot Reporter</h3>
+                <div class="details-list">
+                    <p><span>Address</span><code id="reporter-address">--</code></p>
+                    <p><span>Balance (ETH)</span><code id="reporter-balance">--</code></p>
+                    <p><span>Tx Count</span><code id="reporter-tx-count">--</code></p>
+                    <p><span>Last Tx Hash</span><code id="reporter-last-tx">--</code></p>
+                </div>
+            </div>
+        </section>
     </div>
 
     <script src="app.js"></script>

@@ -3,6 +3,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.getElementById('threat-table-body');
     const totalThreatsCounter = document.getElementById('total-threats-counter');
     const criticalCounter = document.getElementById('critical-counter');
+    const blockNumber = document.getElementById('block-number');
+    const blockHash = document.getElementById('block-hash');
+    const blockTimestamp = document.getElementById('block-timestamp');
+    const blockTxCount = document.getElementById('block-tx-count');
+    const contractAddress = document.getElementById('contract-address');
+    const contractNetwork = document.getElementById('contract-network');
+    const contractChainId = document.getElementById('contract-chain-id');
+    const contractTotalLogs = document.getElementById('contract-total-logs');
+    const reporterAddress = document.getElementById('reporter-address');
+    const reporterBalance = document.getElementById('reporter-balance');
+    const reporterTxCount = document.getElementById('reporter-tx-count');
+    const reporterLastTx = document.getElementById('reporter-last-tx');
 
     async function fetchLogs() {
         // UI Loading state
@@ -80,6 +92,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function fetchDashboardSummary() {
+        try {
+            const response = await fetch('/api/dashboard-summary');
+            if (!response.ok) throw new Error('Summary API fetch failed');
+            const summary = await response.json();
+
+            const block = summary.currentBlock || {};
+            const contract = summary.smartContract || {};
+            const reporter = summary.lastHoneypotReporter;
+
+            blockNumber.textContent = block.number ?? '--';
+            blockHash.textContent = shortValue(block.hash);
+            blockTimestamp.textContent = block.timestamp ? new Date(Number(block.timestamp) * 1000).toLocaleString() : '--';
+            blockTxCount.textContent = block.txCount ?? '--';
+
+            contractAddress.textContent = shortValue(contract.address);
+            contractNetwork.textContent = contract.network ?? '--';
+            contractChainId.textContent = contract.chainId ?? '--';
+            contractTotalLogs.textContent = contract.totalThreatLogs ?? '--';
+
+            if (reporter) {
+                reporterAddress.textContent = shortValue(reporter.address);
+                reporterBalance.textContent = Number(reporter.balanceEth).toFixed(4);
+                reporterTxCount.textContent = reporter.transactionCount ?? '--';
+                reporterLastTx.textContent = shortValue(reporter.lastSubmissionTxHash);
+            } else {
+                reporterAddress.textContent = 'No reporter yet';
+                reporterBalance.textContent = '--';
+                reporterTxCount.textContent = '--';
+                reporterLastTx.textContent = '--';
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
     // Simple counter animation
     function animeCounter(element, target) {
         let current = 0;
@@ -98,9 +146,17 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCount();
     }
 
+    function shortValue(value) {
+        if (!value || typeof value !== 'string') return '--';
+        if (value.length <= 16) return value;
+        return `${value.slice(0, 8)}...${value.slice(-6)}`;
+    }
+
     // Bind events
-    refreshBtn.addEventListener('click', fetchLogs);
+    refreshBtn.addEventListener('click', async () => {
+        await Promise.all([fetchLogs(), fetchDashboardSummary()]);
+    });
 
     // Initial load
-    fetchLogs();
+    Promise.all([fetchLogs(), fetchDashboardSummary()]);
 });

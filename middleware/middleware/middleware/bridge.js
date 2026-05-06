@@ -46,6 +46,38 @@ const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS || "0xe7f1725E
 const txQueue = [];
 let isProcessingQueue = false;
 
+async function getLastReporterDetails() {
+  const latestBlockNumber = await provider.getBlockNumber();
+  const fromBlock = latestBlockNumber > 5000 ? latestBlockNumber - 5000 : 0;
+  const latestThreatEvents = await contract.queryFilter(
+    contract.filters.ThreatLogged(),
+    fromBlock,
+    latestBlockNumber
+  );
+  const latestEvent = latestThreatEvents[latestThreatEvents.length - 1];
+
+  if (!latestEvent) {
+    return null;
+  }
+
+  const tx = await provider.getTransaction(latestEvent.transactionHash);
+  if (!tx || !tx.from) {
+    return null;
+  }
+
+  const [balance, txCount] = await Promise.all([
+    provider.getBalance(tx.from),
+    provider.getTransactionCount(tx.from)
+  ]);
+
+  return {
+    address: tx.from,
+    balanceEth: ethers.formatEther(balance),
+    transactionCount: txCount,
+    lastSubmissionTxHash: latestEvent.transactionHash
+  };
+}
+
 async function processQueue() {
   if (isProcessingQueue || txQueue.length === 0) return;
   isProcessingQueue = true;
@@ -139,6 +171,42 @@ app.get('/status', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ status: "Error", message: e.message });
+  }
+});
+
+app.get('/api/dashboard-summary', async (req, res) => {
+  try {
+    const [network, blockNumber, latestBlock, chainId, totalLogs, contractCode, lastReporter] = await Promise.all([
+      provider.getNetwork(),
+      provider.getBlockNumber(),
+      provider.getBlock('latest'),
+      provider.getNetwork().then((n) => n.chainId.toString()),
+      contract.getTotalLogs(),
+      provider.getCode(contract.target),
+      getLastReporterDetails()
+    ]);
+
+    res.json({
+      currentBlock: {
+        number: blockNumber,
+        hash: latestBlock?.hash || null,
+        timestamp: latestBlock?.timestamp || null,
+        txCount: latestBlock?.transactions?.length || 0,
+        parentHash: latestBlock?.parentHash || null
+      },
+      smartContract: {
+        address: contract.target,
+        network: network.name,
+        chainId,
+        totalThreatLogs: totalLogs.toString(),
+        abiFunctionCount: CONTRACT_ABI.length,
+        deployedBytecodeSize: contractCode ? Math.max((contractCode.length - 2) / 2, 0) : 0
+      },
+      lastHoneypotReporter: lastReporter
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard summary:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard summary' });
   }
 });
 

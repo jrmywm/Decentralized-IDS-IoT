@@ -185,6 +185,30 @@ body {
     font-family: var(--font-mono);
 }
 
+.details-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: 0.4rem;
+}
+
+.details-list p {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.details-list code {
+    font-family: var(--font-mono);
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 190px;
+}
+
 /* Ledger Section */
 .ledger-section {
     padding: 1.5rem;
