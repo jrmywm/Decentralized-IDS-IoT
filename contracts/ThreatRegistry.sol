@@ -8,9 +8,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
 
-    // Konfigurasi Reward
+    // Token & Staking Configuration
     IERC20 public rewardToken;
-    uint256 public rewardAmount = 10 * 10**18; // Default 10 koin
+    uint256 public minimumStake = 100 * 10**18; // Default 100 ISEC
+
+    mapping(address => uint256) public stakedBalances;
 
     struct ThreatLog {
         uint256 id;
@@ -28,6 +30,8 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
     event ReporterAdded(address indexed reporter);
     event ReporterRemoved(address indexed reporter);
     event RewardSent(address indexed reporter, uint256 amount);
+    event Staked(address indexed reporter, uint256 amount);
+    event Slashed(address indexed reporter, uint256 amount);
 
     constructor(address _tokenAddress) {
         authorizedReporters[msg.sender] = true;
@@ -40,7 +44,7 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @dev Mencatat ancaman dan memberikan reward koin
+     * @dev Logs a threat and distributes dynamic rewards
      */
     function logThreat(
         string calldata _attackerIP,
@@ -48,6 +52,8 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
         uint8 _dangerLevel,
         string calldata _deviceId
     ) external onlyAuthorized whenNotPaused nonReentrant returns (uint256) {
+        require(stakedBalances[msg.sender] >= minimumStake, "ThreatRegistry: Insufficient stake to report");
+
         uint256 logId = threatLogs.length;
 
         threatLogs.push(ThreatLog({
@@ -59,7 +65,9 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
             deviceId: _deviceId
         }));
 
-        // Logika Pengiriman Reward
+        // Dynamic Reward Logic
+        uint256 rewardAmount = _calculateReward(_dangerLevel);
+
         if (address(rewardToken) != address(0) && rewardToken.balanceOf(address(this)) >= rewardAmount) {
             rewardToken.transfer(msg.sender, rewardAmount);
             emit RewardSent(msg.sender, rewardAmount);
@@ -69,7 +77,7 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
         return logId;
     }
 
-    // --- Fungsi View ---
+    // --- View Functions ---
 
     function getLog(uint256 _id) external view returns (ThreatLog memory) {
         require(_id < threatLogs.length, "ThreatRegistry: Log ID does not exist");
@@ -80,7 +88,24 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
         return threatLogs.length;
     }
 
-    // --- Fungsi Administrasi (Owner Only) ---
+    function _calculateReward(uint8 _dangerLevel) internal pure returns (uint256) {
+        if (_dangerLevel == 1) return 5 * 10**18;       // Low: 5 ISEC
+        if (_dangerLevel == 2) return 10 * 10**18;      // Medium: 10 ISEC
+        if (_dangerLevel == 3) return 25 * 10**18;      // High: 25 ISEC
+        if (_dangerLevel >= 4) return 50 * 10**18;      // Critical: 50 ISEC
+        return 0;
+    }
+
+    // --- Staking Functions ---
+
+    function stake(uint256 _amount) external {
+        require(_amount > 0, "ThreatRegistry: Cannot stake 0");
+        require(rewardToken.transferFrom(msg.sender, address(this), _amount), "ThreatRegistry: Transfer failed");
+        stakedBalances[msg.sender] += _amount;
+        emit Staked(msg.sender, _amount);
+    }
+
+    // --- Administration Functions (Owner Only) ---
 
     function addReporter(address _reporter) external onlyOwner {
         authorizedReporters[_reporter] = true;
@@ -92,8 +117,15 @@ contract ThreatRegistry is Ownable, ReentrancyGuard, Pausable {
         emit ReporterRemoved(_reporter);
     }
 
-    function updateRewardAmount(uint256 _newAmount) external onlyOwner {
-        rewardAmount = _newAmount;
+    function slash(address _reporter, uint256 _amount) external onlyOwner {
+        require(stakedBalances[_reporter] >= _amount, "ThreatRegistry: Insufficient staked balance to slash");
+        stakedBalances[_reporter] -= _amount;
+        // Tokens remain in the contract effectively acting as a burn/penalty
+        emit Slashed(_reporter, _amount);
+    }
+
+    function updateMinimumStake(uint256 _newAmount) external onlyOwner {
+        minimumStake = _newAmount;
     }
 
     function pause() external onlyOwner {

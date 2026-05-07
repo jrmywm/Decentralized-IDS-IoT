@@ -2,7 +2,7 @@
 
 A secure, immutable system for detecting and recording IoT-based cyber threats using a distributed ledger with an automated **ISEC Token** reward mechanism.
 
-## 📌 Project Overview
+## Project Overview
 This project implements a **Decentralized Intrusion Detection System (IDS)** designed for IoT environments. By combining a honeypot (simulated vulnerable IoT devices) with a blockchain ledger, it ensures that threat logs are transparent, verifiable, and resistant to tampering.
 
 ### The Problem
@@ -11,19 +11,30 @@ Traditional centralized logging systems are vulnerable: if an attacker compromis
 ### The Solution
 By piping threat data through a secure middleware into a **Smart Contract**, every detected attack is permanently etched into the blockchain. Even if the honeypot or middleware is compromised, the historical record of attacks remains immutable and serves as valid digital evidence.
 
-### 🛡️ Key Feature: ISEC Coin (IoT Security Token)
-We have introduced the **ISEC (ERC-20)** token as an economic incentive:
-* **Token Reward:** Every device/reporter that successfully logs a valid threat receives **10 ISEC**.
-* **Automated Incentive:** Rewards are sent directly by the Smart Contract to the reporter's wallet, encouraging node operators to maintain active security monitoring.
+### Key Feature: Crypto-Economic Security (ISEC Token)
+We have introduced the **ISEC (ERC-20)** token to create a robust crypto-economic security model:
+* **Anti-Poisoning Staking:** Nodes must lock a collateral stake of **100 ISEC** to be authorized to report. Malicious nodes can be slashed by admins.
+* **Dynamic Rewards:** To incentivize accurate reporting, the Smart Contract automatically scales rewards based on threat severity (e.g., Level 1 = 5 ISEC, Level 4 Critical = 50 ISEC).
+
+### How the Blockchain Data Storage Works
+Unlike traditional centralized databases (like MySQL or MongoDB), our system stores threat data permanently on the **Ethereum Sepolia** public blockchain (or Polygon).
+
+*   **Smart Contract Storage:** The actual data (Threat logs, Staked Balances, Token Ledgers) is physically stored within the *state variables* of the `ThreatRegistry.sol` and `IoTToken.sol` smart contracts.
+*   **The Network (Polygon/Sepolia):** These smart contracts are deployed to a distributed network of thousands of nodes globally. This means there is no single server to hack. If one node goes down, the data remains perfectly intact across the network.
+*   **The Middleware Connection:** Our Node.js middleware (`bridge.js`) acts as the bridge. It uses the `POLYGON_RPC_URL` (or Sepolia RPC) defined in your `.env` file to securely connect to a public node (like `publicnode.com`). When a threat is detected, the middleware packages the data and sends a cryptographic transaction to the network, permanently etching the data into the public ledger.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 The system consists of three primary layers:
 
 ### 1. IoT Layer (The Trigger)
-- **Function**: Simulates a vulnerable device (e.g., ESP32) that attracts attackers.
+- **Function**: Simulates a vulnerable device (e.g., ESP32 or Raspberry Pi) that attracts attackers by exposing fake services.
+- **Threat Detection Methods**:
+  - **Port Listening**: Opens common ports (e.g., 22 for SSH, 23 for Telnet). Logs any unauthorized IP attempting to connect as a Port Scanner or Brute-force attack.
+  - **Fake Services**: Runs simulated services (like a fake web login). If an attacker inputs malicious payloads (e.g., `OR 1=1`), the device categorizes it as SQL Injection.
+  - **Automated Trigger**: Once a rule is matched, the device's script instantly constructs the threat data (Attacker IP, Attack Type, Danger Level) into a JSON payload.
 - **Workflow**: Detects a threat $\rightarrow$ Base64 encodes the payload $\rightarrow$ Sends a signed POST request to the Middleware.
 - **Security**: Uses a shared secret token (`x-helium-token`) for authentication.
 
@@ -44,7 +55,7 @@ The system consists of three primary layers:
 
 ---
 
-## 🚀 Getting Started (Demo Guide)
+## Getting Started (Demo Guide)
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v16+)
@@ -83,50 +94,44 @@ TOKEN_CONTRACT_ADDRESS=deployed_token_address
 
 ### Running the System
 
-To demonstrate the end-to-end flow, please follow these steps in order using **5 separate terminal windows**.
+To demonstrate the end-to-end flow, please follow these steps.
 
-### Window 1: Blockchain Infrastructure
-Start the local Ethereum-compatible node to act as the network foundation.
+### Terminal 1: Smart Contract Deployment
+Deploy the contracts to the Sepolia public testnet and fund the reward reserve.
 ```bash
 # Navigate to: \Decentralized-IDS-IoT
-npx hardhat node
+npx hardhat run scripts/deploy.js --network sepolia
 ```
+> **Note:** Update your `.env` files with the newly generated contract addresses.
 
-### Window 2: Smart Contract Deployment
-Deploy the contracts to the local network and fund the reward reserve.
-```bash
-# Navigate to: \Decentralized-IDS-IoT
-npx hardhat run scripts/deploy.js --network localhost
-```
-> **Note:** This funds the Registry with 500,000 ISEC to be used for rewards.
-
-### Window 3: Middleware Threat Bridge
-Start the intermediary server that bridges the IoT devices and the Blockchain.
+### Terminal 2: Middleware Threat Bridge
+Start the intermediary server that bridges the IoT devices and the Blockchain, and serves the Web3 Dashboard.
 ```bash
 # Navigate to: \Decentralized-IDS-IoT\middleware\middleware\middleware
 node bridge.js
 ```
 
-### Window 4: IoT Simulator (PowerShell)
-Simulate a threat detection from an ESP32 device by sending an encrypted payload.
-```powershell
-Invoke-RestMethod -Uri "http://localhost:3000/webhook" `
-  -Method Post `
-  -Headers @{"Content-Type" = "application/json"; "x-helium-token" = "your_secret_token_here"} `
-  -Body '{"payload": "eyJhdHRhY2tlcklQIjogIjE5Mi4xNjguMS4xMDciLCAiYXR0YWNrVHlwZSI6ICJTU0ggQnJ1dGUgRm9yY2UiLCAiZGFuZ2VyTGV2ZWwiOiAzLCAiZGV2aWNlSWQiOiAiRVNQMzJfREVWXzAxIn0="}'
-```
-
-### Window 5: Verification (Reward Check)
-Verify that the 10 ISEC reward has been successfully transferred to the reporter.
+### Terminal 3: Setup Node Staking
+Before logging threats, lock 100 ISEC as collateral.
 ```bash
 # Navigate to: \Decentralized-IDS-IoT
-npx hardhat run checkBalance.cjs --network localhost
+npx hardhat run scripts/setup-stake.js --network sepolia
 ```
-> **Observation:** The balance will increase by **10 ISEC** every time the simulator (Window 4) is triggered.
+
+### Terminal 4: IoT Simulator
+Simulate a threat detection from an ESP32 device to trigger the dynamic reward logic.
+```bash
+# Navigate to: \Decentralized-IDS-IoT\middleware\middleware\middleware
+node test-webhook.js
+```
+
+### Terminal 5: Verification (Dashboard)
+Verify the dynamic rewards and your staked status visually.
+Open your browser and navigate to `http://localhost:3000`. You will see your node in the **Active Staked Nodes** table and the reward transferred in the **IoTToken Latest Ledger**.
 
 ---
 
-## 🛠️ Key Components
+## Key Components
 
 | Component | File Path | Description |
 | :--- | :--- | :--- |
@@ -140,7 +145,7 @@ npx hardhat run checkBalance.cjs --network localhost
 ---
 
 
-## 📊 Dashboard Access
+## Dashboard Access
 
 Once the bridge is running, you can monitor the system via the following endpoints:
 
@@ -150,6 +155,6 @@ Once the bridge is running, you can monitor the system via the following endpoin
     
 ---
 
-## 📖 Additional Documentation
+## Additional Documentation
 - For a step-by-step walkthrough, see [DEMO_GUIDE.md](DEMO_GUIDE.md).
 - For verification steps, see [TESTING.md](TESTING.md).

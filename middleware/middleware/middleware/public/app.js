@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refresh-btn');
     const tableBody = document.getElementById('threat-table-body');
     const tokenLedgerBody = document.getElementById('token-ledger-body');
+    const stakedNodesBody = document.getElementById('staked-nodes-body');
     const totalThreatsCounter = document.getElementById('total-threats-counter');
     const criticalCounter = document.getElementById('critical-counter');
     const blockNumber = document.getElementById('block-number');
@@ -154,12 +155,23 @@ document.addEventListener('DOMContentLoaded', () => {
             ledger.forEach((entry) => {
                 const tr = document.createElement('tr');
                 const formattedDate = entry.timestamp ? new Date(Number(entry.timestamp) * 1000).toLocaleString() : '--';
+                
+                // Highlight Dynamic Rewards
+                let valueDisplay = entry.value;
+                const numValue = parseFloat(entry.value);
+                if (numValue >= 25) {
+                    valueDisplay = `<span class="badge badge-critical" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); font-weight: bold; padding: 4px 8px; border-radius: 4px;">🚨 ${entry.value} ISEC (Dynamic Reward)</span>`;
+                    tr.style.backgroundColor = "rgba(239, 68, 68, 0.05)";
+                } else if (numValue >= 5 && numValue < 25) {
+                    valueDisplay = `<span class="badge badge-high" style="background: rgba(245, 158, 11, 0.2); border: 1px solid var(--warning); padding: 4px 8px; border-radius: 4px;">${entry.value} ISEC</span>`;
+                }
+
                 tr.innerHTML = `
                     <td class="mono">#${entry.blockNumber}</td>
                     <td>${formattedDate}</td>
                     <td class="mono">${shortValue(entry.from)}</td>
                     <td class="mono">${shortValue(entry.to)}</td>
-                    <td>${entry.value}</td>
+                    <td>${valueDisplay}</td>
                     <td class="mono">${shortValue(entry.txHash)}</td>
                 `;
                 tokenLedgerBody.appendChild(tr);
@@ -170,6 +182,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr>
                     <td colspan="6" class="loading-state" style="color: var(--danger);">
                         Failed to load IoTToken ledger.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    async function fetchStakedNodes() {
+        stakedNodesBody.innerHTML = `
+            <tr>
+                <td colspan="3" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading staked nodes from blockchain...</p>
+                </td>
+            </tr>
+        `;
+
+        try {
+            const response = await fetch('/api/staked-nodes');
+            if (!response.ok) throw new Error('Staked nodes API fetch failed');
+            const nodes = await response.json();
+
+            stakedNodesBody.innerHTML = '';
+            if (nodes.length === 0) {
+                stakedNodesBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 2rem;">No staked nodes found on the network.</td></tr>`;
+                return;
+            }
+
+            nodes.forEach((node) => {
+                const tr = document.createElement('tr');
+                const balance = parseFloat(node.stakedBalance);
+                
+                let statusBadge = '<span class="badge badge-low">Verified</span>';
+                if (balance < 100) {
+                    statusBadge = '<span class="badge badge-critical">Slashed / Inactive</span>';
+                    tr.style.opacity = "0.6";
+                }
+
+                tr.innerHTML = `
+                    <td class="mono" style="font-weight: 600; color: var(--primary);">${node.address}</td>
+                    <td style="font-family: 'Fira Code', monospace; font-size: 1.1rem;">${node.stakedBalance}</td>
+                    <td>${statusBadge}</td>
+                `;
+                stakedNodesBody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error(error);
+            stakedNodesBody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="loading-state" style="color: var(--danger);">
+                        Failed to load staked nodes.
                     </td>
                 </tr>
             `;
@@ -202,9 +264,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bind events
     refreshBtn.addEventListener('click', async () => {
-        await Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger()]);
+        await Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes()]);
     });
 
     // Initial load
-    Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger()]);
+    Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes()]);
 });

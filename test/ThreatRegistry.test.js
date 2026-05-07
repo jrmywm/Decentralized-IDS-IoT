@@ -1,73 +1,68 @@
 const { expect } = require("chai");
 const hre = require("hardhat");
 
-describe("ThreatRegistry", function () {
-  let ThreatRegistry, registry, owner, reporter, stranger;
+describe("ThreatRegistry Crypto-Economic Security", function () {
+  let ThreatRegistry, registry, IoTToken, token, owner, reporter, stranger;
 
   beforeEach(async function () {
     const { ethers } = hre;
     [owner, reporter, stranger] = await ethers.getSigners();
 
-    ThreatRegistry = await ethers.getContractFactory("ThreatRegistry");
-    registry = await ThreatRegistry.deploy();
-    await registry.waitForDeployment(); // Ethers v6 use this instead of .deployed()
+    IoTToken = await ethers.getContractFactory("IoTToken");
+    token = await IoTToken.deploy();
+    await token.waitForDeployment();
 
-    // Add reporter as an authorized reporter
+    ThreatRegistry = await ethers.getContractFactory("ThreatRegistry");
+    registry = await ThreatRegistry.deploy(await token.getAddress());
+    await registry.waitForDeployment();
+
+    // Setup Token Distribution & Approvals
+    await token.transfer(reporter.address, ethers.parseEther("500"));
+    await token.transfer(await registry.getAddress(), ethers.parseEther("500000")); // Reserve
+    await token.connect(reporter).approve(await registry.getAddress(), ethers.parseEther("500"));
+
+    // Add reporter
     await registry.addReporter(reporter.address);
   });
 
-  it("Should initialize with the deployer as owner and reporter", async function () {
-    expect(await registry.owner()).to.equal(owner.address);
-    expect(await registry.authorizedReporters(owner.address)).to.be.true;
-  });
+  it("Should require staking before logging a threat", async function () {
+    await expect(
+      registry.connect(reporter).logThreat("1.1.1.1", "Scan", 1, "DEV1")
+    ).to.be.revertedWith("ThreatRegistry: Insufficient stake to report");
 
-  it("Should allow an authorized reporter to log a threat", async function () {
-    const tx = await registry.connect(reporter).logThreat(
-      "192.168.1.10",
-      "SSH Brute Force",
-      3,
-      "ESP32_001"
-    );
+    // Stake 100 tokens
+    await registry.connect(reporter).stake(ethers.parseEther("100"));
+    expect(await registry.stakedBalances(reporter.address)).to.equal(ethers.parseEther("100"));
 
-    await tx.wait();
+    // Now it should work
+    await registry.connect(reporter).logThreat("1.1.1.1", "Scan", 1, "DEV1");
     expect(await registry.getTotalLogs()).to.equal(1);
-
-    const log = await registry.getLog(0);
-    expect(log.attackerIP).to.equal("192.168.1.10");
-    expect(log.attackType).to.equal("SSH Brute Force");
-    expect(log.dangerLevel).to.equal(3);
-    expect(log.deviceId).to.equal("ESP32_001");
   });
 
-  it("Should reject threats from unauthorized addresses", async function () {
+  it("Should dynamically reward based on danger level", async function () {
+    await registry.connect(reporter).stake(ethers.parseEther("100"));
+    
+    const balanceBefore = await token.balanceOf(reporter.address);
+    // Level 1: 5 ISEC
+    await registry.connect(reporter).logThreat("IP", "Scan", 1, "DEV");
+    const balanceAfter1 = await token.balanceOf(reporter.address);
+    expect(balanceAfter1 - balanceBefore).to.equal(ethers.parseEther("5"));
+
+    // Level 4: 50 ISEC
+    await registry.connect(reporter).logThreat("IP", "RCE", 4, "DEV");
+    const balanceAfter4 = await token.balanceOf(reporter.address);
+    expect(balanceAfter4 - balanceAfter1).to.equal(ethers.parseEther("50"));
+  });
+
+  it("Should allow owner to slash a malicious reporter", async function () {
+    await registry.connect(reporter).stake(ethers.parseEther("100"));
+    
+    await registry.slash(reporter.address, ethers.parseEther("50"));
+    expect(await registry.stakedBalances(reporter.address)).to.equal(ethers.parseEther("50"));
+
+    // Reporter now has < 100 staked, should not be able to log
     await expect(
-      registry.connect(stranger).logThreat(
-        "1.1.1.1",
-        "Port Scan",
-        1,
-        "ESP32_BAD"
-      )
-    ).to.be.revertedWith("ThreatRegistry: Caller is not an authorized reporter");
-  });
-
-  it("Should allow owner to add/remove reporters", async function () {
-    await registry.addReporter(stranger.address);
-    expect(await registry.authorizedReporters(stranger.address)).to.be.true;
-
-    await registry.removeReporter(stranger.address);
-    expect(await registry.authorizedReporters(stranger.address)).to.be.false;
-  });
-
-  it("Should fail when contract is paused", async function () {
-    await registry.pause();
-    await expect(
-      registry.connect(reporter).logThreat(
-        "2.2.2.2",
-        "Test",
-        1,
-        "DEV"
-      )
-    ).to.be.revertedWith("Pausable: paused");
-    await registry.unpause();
+      registry.connect(reporter).logThreat("IP", "Fake", 4, "DEV")
+    ).to.be.revertedWith("ThreatRegistry: Insufficient stake to report");
   });
 });

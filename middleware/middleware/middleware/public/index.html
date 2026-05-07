@@ -120,9 +120,34 @@
             </div>
         </section>
 
+        <main class="glass-panel ledger-section" style="margin-bottom: 2rem;">
+            <div class="ledger-header">
+                <h2>Active Staked Nodes & Reputation</h2>
+            </div>
+            <div class="table-container">
+                <table id="staked-nodes-table">
+                    <thead>
+                        <tr>
+                            <th>Node Address</th>
+                            <th>Staked Balance (ISEC)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="staked-nodes-body">
+                        <tr>
+                            <td colspan="3" class="loading-state">
+                                <div class="spinner"></div>
+                                <p>Loading staked nodes from blockchain...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
         <main class="glass-panel ledger-section">
             <div class="ledger-header">
-                <h2>IoTToken Latest Ledger</h2>
+                <h2>IoTToken Latest Ledger & Dynamic Rewards</h2>
             </div>
             <div class="table-container">
                 <table id="token-ledger-table">

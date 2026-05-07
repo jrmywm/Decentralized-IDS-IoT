@@ -9,7 +9,7 @@ contract IoTToken is ERC20, Ownable {
         _mint(msg.sender, 1000000 * 10 ** decimals());
     }
 
-    // Fungsi tambahan jika ingin menambah supply koin di masa depan
+    // Additional function to increase token supply in the future if needed
     function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
     }

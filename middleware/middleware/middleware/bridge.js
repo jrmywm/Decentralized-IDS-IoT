@@ -3,17 +3,17 @@ import bodyParser from 'body-parser';
 import { ethers } from 'ethers';
 import path from 'path';
 import dotenv from 'dotenv';
-import cors from 'cors'; // Tambahkan cors agar dashboard lancar
+import cors from 'cors'; // Add cors for dashboard API access
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Perbaiki pemuatan .env agar lebih fleksibel
+// Improve .env loading flexibility
 dotenv.config(); 
 
 const app = express();
-app.use(cors()); // Mengizinkan dashboard mengakses API
+app.use(cors()); // Allow dashboard to access API
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -28,11 +28,14 @@ const SECRET_TOKEN = process.env.HEC_SECRET_TOKEN || "your_secret_token_here";
 
 const CONTRACT_ABI = [
   "function logThreat(string _attackerIP, string _attackType, uint8 _dangerLevel, string _deviceId) external returns (uint256)",
-  // Gunakan tuple tanpa nama field di dalam returns agar ethers v6 mengembalikan Array yang stabil
+  // Use unnamed tuple fields in returns for stable Ethers v6 Array response
   "function getLog(uint256 _id) external view returns (tuple(uint256, uint256, string, string, uint8, string))",
   "function getTotalLogs() external view returns (uint256)",
+  "function stakedBalances(address) external view returns (uint256)",
   "event ThreatLogged(uint256 indexed logId, string indexed attackerIP, string attackType, uint8 dangerLevel)",
-  "event RewardSent(address indexed reporter, uint256 amount)"
+  "event RewardSent(address indexed reporter, uint256 amount)",
+  "event Staked(address indexed reporter, uint256 amount)",
+  "event Slashed(address indexed reporter, uint256 amount)"
 ];
 
 const IOT_TOKEN_ABI = [
@@ -44,7 +47,7 @@ const IOT_TOKEN_ABI = [
 
 const provider = new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL || "http://127.0.0.1:8545");
 
-// Bersihkan Private Key dari spasi/karakter aneh
+// Clean Private Key from spaces/weird characters
 const privateKey = (process.env.PRIVATE_KEY || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").trim();
 const wallet = new ethers.Wallet(privateKey, provider);
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", CONTRACT_ABI, wallet);
@@ -119,7 +122,7 @@ function decodeHeliumPayload(payload) {
   }
 }
 
-// API Endpoint: PERBAIKAN UTAMA DISINI
+// API Endpoint: CORE FIX HERE
 app.get('/api/logs', async (req, res) => {
   try {
     const total = await contract.getTotalLogs();
@@ -129,7 +132,7 @@ app.get('/api/logs', async (req, res) => {
     for (let i = total - 1n; i >= total - limit; i--) {
       try {
         const logData = await contract.getLog(i);
-        // Menggunakan akses index [0], [1], dst. karena ethers v6 mengembalikan Result Array
+        // Using index access [0], [1], etc. because ethers v6 returns a Result Array
         if (logData) {
           logs.push({
             id: logData[0].toString(),
@@ -272,6 +275,47 @@ app.get('/api/token-ledger', async (req, res) => {
   } catch (error) {
     console.error('Error fetching token ledger:', error);
     res.status(500).json({ error: 'Failed to fetch token ledger' });
+  }
+});
+
+app.get('/api/staked-nodes', async (req, res) => {
+  try {
+    const latestBlock = await provider.getBlockNumber();
+    const fromBlock = latestBlock > 10000 ? latestBlock - 10000 : 0;
+    
+    // Find all unique reporters from Staked events
+    const stakedEvents = await contract.queryFilter(
+      contract.filters.Staked(),
+      fromBlock,
+      latestBlock
+    );
+    
+    const uniqueReporters = new Set();
+    stakedEvents.forEach(evt => {
+      if (evt.args && evt.args.reporter) {
+        uniqueReporters.add(evt.args.reporter);
+      }
+    });
+
+    // Also include the last honeypot reporter just in case
+    const lastReporterDetails = await getLastReporterDetails();
+    if (lastReporterDetails && lastReporterDetails.address) {
+        uniqueReporters.add(lastReporterDetails.address);
+    }
+
+    const nodes = [];
+    for (const address of uniqueReporters) {
+      const balance = await contract.stakedBalances(address);
+      nodes.push({
+        address,
+        stakedBalance: ethers.formatEther(balance)
+      });
+    }
+
+    res.json(nodes);
+  } catch (error) {
+    console.error('Error fetching staked nodes:', error);
+    res.status(500).json({ error: 'Failed to fetch staked nodes' });
   }
 });
 
