@@ -35,12 +35,24 @@ const CONTRACT_ABI = [
   "event RewardSent(address indexed reporter, uint256 amount)"
 ];
 
+const IOT_TOKEN_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)"
+];
+
 const provider = new ethers.JsonRpcProvider(process.env.POLYGON_RPC_URL || "http://127.0.0.1:8545");
 
 // Bersihkan Private Key dari spasi/karakter aneh
 const privateKey = (process.env.PRIVATE_KEY || "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80").trim();
 const wallet = new ethers.Wallet(privateKey, provider);
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", CONTRACT_ABI, wallet);
+const tokenContract = new ethers.Contract(
+  process.env.TOKEN_CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  IOT_TOKEN_ABI,
+  wallet
+);
 
 // --- TRANSACTION QUEUE SYSTEM ---
 const txQueue = [];
@@ -207,6 +219,59 @@ app.get('/api/dashboard-summary', async (req, res) => {
   } catch (error) {
     console.error('Error fetching dashboard summary:', error);
     res.status(500).json({ error: 'Failed to fetch dashboard summary' });
+  }
+});
+
+app.get('/api/token-ledger', async (req, res) => {
+  try {
+    const latestBlock = await provider.getBlockNumber();
+    const fromBlock = latestBlock > 10000 ? latestBlock - 10000 : 0;
+    const tokenMeta = await Promise.all([
+      tokenContract.name(),
+      tokenContract.symbol(),
+      tokenContract.decimals()
+    ]);
+
+    const transferEvents = await tokenContract.queryFilter(
+      tokenContract.filters.Transfer(),
+      fromBlock,
+      latestBlock
+    );
+
+    const recentEvents = transferEvents.slice(-50).reverse();
+    const blockCache = new Map();
+    const ledger = [];
+
+    for (const evt of recentEvents) {
+      const blockNumber = evt.blockNumber;
+      let block = blockCache.get(blockNumber);
+      if (!block) {
+        block = await provider.getBlock(blockNumber);
+        blockCache.set(blockNumber, block);
+      }
+
+      ledger.push({
+        blockNumber,
+        txHash: evt.transactionHash,
+        from: evt.args?.from || null,
+        to: evt.args?.to || null,
+        value: ethers.formatUnits(evt.args?.value || 0n, tokenMeta[2]),
+        timestamp: block?.timestamp || null
+      });
+    }
+
+    res.json({
+      token: {
+        address: tokenContract.target,
+        name: tokenMeta[0],
+        symbol: tokenMeta[1],
+        decimals: Number(tokenMeta[2])
+      },
+      ledger
+    });
+  } catch (error) {
+    console.error('Error fetching token ledger:', error);
+    res.status(500).json({ error: 'Failed to fetch token ledger' });
   }
 });
 

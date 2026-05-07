@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refresh-btn');
     const tableBody = document.getElementById('threat-table-body');
+    const tokenLedgerBody = document.getElementById('token-ledger-body');
     const totalThreatsCounter = document.getElementById('total-threats-counter');
     const criticalCounter = document.getElementById('critical-counter');
     const blockNumber = document.getElementById('block-number');
@@ -128,6 +129,53 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function fetchTokenLedger() {
+        tokenLedgerBody.innerHTML = `
+            <tr>
+                <td colspan="6" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading IoTToken transfer ledger...</p>
+                </td>
+            </tr>
+        `;
+
+        try {
+            const response = await fetch('/api/token-ledger');
+            if (!response.ok) throw new Error('Token ledger API fetch failed');
+            const data = await response.json();
+            const ledger = data.ledger || [];
+
+            tokenLedgerBody.innerHTML = '';
+            if (ledger.length === 0) {
+                tokenLedgerBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">No IoTToken transfer entries found.</td></tr>`;
+                return;
+            }
+
+            ledger.forEach((entry) => {
+                const tr = document.createElement('tr');
+                const formattedDate = entry.timestamp ? new Date(Number(entry.timestamp) * 1000).toLocaleString() : '--';
+                tr.innerHTML = `
+                    <td class="mono">#${entry.blockNumber}</td>
+                    <td>${formattedDate}</td>
+                    <td class="mono">${shortValue(entry.from)}</td>
+                    <td class="mono">${shortValue(entry.to)}</td>
+                    <td>${entry.value}</td>
+                    <td class="mono">${shortValue(entry.txHash)}</td>
+                `;
+                tokenLedgerBody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error(error);
+            tokenLedgerBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="loading-state" style="color: var(--danger);">
+                        Failed to load IoTToken ledger.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
     // Simple counter animation
     function animeCounter(element, target) {
         let current = 0;
@@ -154,9 +202,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bind events
     refreshBtn.addEventListener('click', async () => {
-        await Promise.all([fetchLogs(), fetchDashboardSummary()]);
+        await Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger()]);
     });
 
     // Initial load
-    Promise.all([fetchLogs(), fetchDashboardSummary()]);
+    Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger()]);
 });

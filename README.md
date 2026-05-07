@@ -78,7 +78,7 @@ HEC_SECRET_TOKEN=your_secret_token_here
 POLYGON_RPC_URL=http://127.0.0.1:8545
 PRIVATE_KEY=your_wallet_private_key
 CONTRACT_ADDRESS=deployed_registry_address
-TOKEN_ADDRESS=deployed_token_address
+TOKEN_CONTRACT_ADDRESS=deployed_token_address
 ```
 
 ### Running the System
