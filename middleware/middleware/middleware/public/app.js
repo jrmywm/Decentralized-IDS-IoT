@@ -51,13 +51,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     let severityBadge = '';
                     if (dl >= 4) {
-                        severityBadge = '<span class="badge badge-critical">🚨 CRITICAL</span>';
+                        severityBadge = '<span class="badge badge-critical">CRITICAL</span>';
                     } else if (dl === 3) {
-                        severityBadge = '<span class="badge badge-high">🟠 HIGH</span>';
+                        severityBadge = '<span class="badge badge-high">HIGH</span>';
                     } else if (dl === 2) {
-                        severityBadge = '<span class="badge badge-medium">🟡 MEDIUM</span>';
+                        severityBadge = '<span class="badge badge-medium">MEDIUM</span>';
                     } else {
-                        severityBadge = '<span class="badge badge-low">🔵 LOW</span>';
+                        severityBadge = '<span class="badge badge-low">LOW</span>';
                     }
 
                     const date = new Date(parseInt(log.timestamp) * 1000).toLocaleString();
@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="6" class="loading-state" style="color: var(--danger);">
-                        ❌ Failed to sync with blockchain. Node might be offline.
+                        [Error] Failed to sync with blockchain. Node might be offline.
                     </td>
                 </tr>
             `;
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let valueDisplay = entry.value;
                 const numValue = parseFloat(entry.value);
                 if (numValue >= 25) {
-                    valueDisplay = `<span class="badge badge-critical" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); font-weight: bold; padding: 4px 8px; border-radius: 4px;">🚨 ${entry.value} ISEC (Dynamic Reward)</span>`;
+                    valueDisplay = `<span class="badge badge-critical" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); font-weight: bold; padding: 4px 8px; border-radius: 4px;">${entry.value} ISEC (Dynamic Reward)</span>`;
                     tr.style.backgroundColor = "rgba(239, 68, 68, 0.05)";
                 } else if (numValue >= 5 && numValue < 25) {
                     valueDisplay = `<span class="badge badge-high" style="background: rgba(245, 158, 11, 0.2); border: 1px solid var(--warning); padding: 4px 8px; border-radius: 4px;">${entry.value} ISEC</span>`;
@@ -276,10 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 let actionContent = '';
                 if (isReady) {
-                    actionContent = `<button class="btn-claim" data-log-id="${reward.logId}" style="background-color: var(--primary); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">💰 Claim Reward</button>`;
+                    actionContent = `<button class="btn-claim" data-log-id="${reward.logId}" style="background-color: var(--primary); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">Claim Reward</button>`;
                 } else {
                     const blocksLeft = unlockBlock - currentBlock;
-                    actionContent = `<button class="btn-locked" disabled style="background-color: #334155; color: #94a3b8; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: not-allowed;">🔒 Locked (${blocksLeft} blocks left)</button>`;
+                    actionContent = `<button class="btn-locked" disabled style="background-color: #334155; color: #94a3b8; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: not-allowed;">[Locked] (${blocksLeft} blocks left)</button>`;
                 }
 
                 tr.innerHTML = `
@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.addEventListener('click', async (e) => {
                     const logId = e.target.getAttribute('data-log-id');
                     const originalText = e.target.innerText;
-                    e.target.innerText = "⏳ Claiming...";
+                    e.target.innerText = "Claiming...";
                     e.target.disabled = true;
                     e.target.style.opacity = "0.7";
                     
@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const result = await res.json();
                         
                         if (result.success) {
-                            e.target.innerText = "✅ Claimed!";
+                            e.target.innerText = "Claimed!";
                             e.target.style.backgroundColor = "var(--success)";
                             // Refresh dashboard
                             setTimeout(() => {
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     } catch (err) {
                         console.error(err);
-                        e.target.innerText = "❌ Failed";
+                        e.target.innerText = "Failed";
                         e.target.style.backgroundColor = "var(--danger)";
                         alert("Failed to claim reward: " + err.message);
                         setTimeout(() => {

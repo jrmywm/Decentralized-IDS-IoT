@@ -46,9 +46,9 @@ async function main() {
   console.log("   [Success] 100 blocks have passed. Dispute window is closed.\n");
 
   console.log("=================================================");
-  console.log("🎉 UI IS READY!");
+  console.log("[!] UI IS READY!");
   console.log("Go to http://localhost:3000 in your browser.");
-  console.log("Click 'Sync with Blockchain', and you will see the bright green CLAIM button!");
+  console.log("Click 'Sync with Blockchain', and you will see the CLAIM button!");
   console.log("=================================================");
 }
 

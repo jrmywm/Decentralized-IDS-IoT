@@ -373,6 +373,6 @@ app.post('/api/claim-reward', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Threat Bridge running on port ${PORT}`);
+  console.log(`[System] Threat Bridge running on port ${PORT}`);
   console.log(`Connected to Registry: ${contract.target}`);
 });
