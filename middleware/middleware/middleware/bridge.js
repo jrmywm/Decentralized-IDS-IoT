@@ -32,6 +32,8 @@ const CONTRACT_ABI = [
   "function getLog(uint256 _id) external view returns (tuple(uint256, uint256, string, string, uint8, string))",
   "function getTotalLogs() external view returns (uint256)",
   "function stakedBalances(address) external view returns (uint256)",
+  "function pendingRewards(uint256) external view returns (address reporter, uint256 amount, uint256 unlockBlock)",
+  "function claimReward(uint256 _logId) external",
   "event ThreatLogged(uint256 indexed logId, string indexed attackerIP, string attackType, uint8 dangerLevel)",
   "event RewardSent(address indexed reporter, uint256 amount)",
   "event Staked(address indexed reporter, uint256 amount)",
@@ -316,6 +318,57 @@ app.get('/api/staked-nodes', async (req, res) => {
   } catch (error) {
     console.error('Error fetching staked nodes:', error);
     res.status(500).json({ error: 'Failed to fetch staked nodes' });
+  }
+});
+
+app.get('/api/pending-rewards', async (req, res) => {
+  try {
+    const totalLogs = await contract.getTotalLogs();
+    const pendingRewards = [];
+
+    // Loop through logs backwards (latest first) up to a max of 50
+    const limit = totalLogs > 50n ? 50n : totalLogs;
+    
+    for (let i = totalLogs - 1n; i >= totalLogs - limit; i--) {
+      try {
+        const rewardData = await contract.pendingRewards(i);
+        const amount = rewardData[1]; // Index 1 is amount
+        const unlockBlock = rewardData[2]; // Index 2 is unlockBlock
+        
+        if (amount > 0n) {
+          const logData = await contract.getLog(i);
+          pendingRewards.push({
+            logId: i.toString(),
+            reporter: logData ? logData[5] : "Unknown", // using deviceId as reporter name fallback, though actual address is better. Let's just return what we have.
+            amount: ethers.formatEther(amount),
+            unlockBlock: unlockBlock.toString()
+          });
+        }
+      } catch (err) {
+        console.warn(`Skipping pending reward check for log ${i}:`, err.message);
+      }
+    }
+    res.json(pendingRewards);
+  } catch (error) {
+    console.error('Error fetching pending rewards:', error);
+    res.status(500).json({ error: 'Failed to fetch pending rewards' });
+  }
+});
+
+app.post('/api/claim-reward', async (req, res) => {
+  try {
+    const { logId } = req.body;
+    if (logId === undefined) return res.status(400).json({ error: 'Missing logId' });
+    
+    console.log(`[API] Triggering claimReward for logId: ${logId}...`);
+    const tx = await contract.claimReward(logId);
+    await tx.wait();
+    console.log(`[API] Claim successful: ${tx.hash}`);
+    
+    res.json({ success: true, txHash: tx.hash });
+  } catch (error) {
+    console.error('Error claiming reward:', error.message || error);
+    res.status(500).json({ error: 'Failed to claim reward. It might still be locked or already claimed.' });
   }
 });
 

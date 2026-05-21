@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.getElementById('threat-table-body');
     const tokenLedgerBody = document.getElementById('token-ledger-body');
     const stakedNodesBody = document.getElementById('staked-nodes-body');
+    const pendingRewardsBody = document.getElementById('pending-rewards-body');
     const totalThreatsCounter = document.getElementById('total-threats-counter');
     const criticalCounter = document.getElementById('critical-counter');
     const blockNumber = document.getElementById('block-number');
@@ -238,6 +239,113 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function fetchPendingRewards() {
+        if (!pendingRewardsBody) return;
+        pendingRewardsBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading pending rewards...</p>
+                </td>
+            </tr>
+        `;
+
+        try {
+            const [rewardsRes, summaryRes] = await Promise.all([
+                fetch('/api/pending-rewards'),
+                fetch('/api/dashboard-summary') // We need the current block to calculate unlock status
+            ]);
+            
+            if (!rewardsRes.ok) throw new Error('Pending rewards API fetch failed');
+            
+            const rewards = await rewardsRes.json();
+            const summary = await summaryRes.json();
+            const currentBlock = summary.currentBlock ? summary.currentBlock.number : 0;
+
+            pendingRewardsBody.innerHTML = '';
+            
+            if (rewards.length === 0) {
+                pendingRewardsBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">No pending rewards locked in escrow.</td></tr>`;
+                return;
+            }
+
+            rewards.forEach((reward) => {
+                const tr = document.createElement('tr');
+                const unlockBlock = parseInt(reward.unlockBlock);
+                const isReady = currentBlock >= unlockBlock;
+                
+                let actionContent = '';
+                if (isReady) {
+                    actionContent = `<button class="btn-claim" data-log-id="${reward.logId}" style="background-color: var(--primary); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">💰 Claim Reward</button>`;
+                } else {
+                    const blocksLeft = unlockBlock - currentBlock;
+                    actionContent = `<button class="btn-locked" disabled style="background-color: #334155; color: #94a3b8; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: not-allowed;">🔒 Locked (${blocksLeft} blocks left)</button>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="mono">#${reward.logId}</td>
+                    <td class="mono">${shortValue(reward.reporter)}</td>
+                    <td style="font-weight: bold; color: var(--warning);">${reward.amount}</td>
+                    <td class="mono">${reward.unlockBlock}</td>
+                    <td>${actionContent}</td>
+                `;
+                pendingRewardsBody.appendChild(tr);
+            });
+            
+            // Attach event listeners to claim buttons
+            document.querySelectorAll('.btn-claim').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const logId = e.target.getAttribute('data-log-id');
+                    const originalText = e.target.innerText;
+                    e.target.innerText = "⏳ Claiming...";
+                    e.target.disabled = true;
+                    e.target.style.opacity = "0.7";
+                    
+                    try {
+                        const res = await fetch('/api/claim-reward', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ logId })
+                        });
+                        const result = await res.json();
+                        
+                        if (result.success) {
+                            e.target.innerText = "✅ Claimed!";
+                            e.target.style.backgroundColor = "var(--success)";
+                            // Refresh dashboard
+                            setTimeout(() => {
+                                Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes(), fetchPendingRewards()]);
+                            }, 1000);
+                        } else {
+                            throw new Error(result.error || 'Claim failed');
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        e.target.innerText = "❌ Failed";
+                        e.target.style.backgroundColor = "var(--danger)";
+                        alert("Failed to claim reward: " + err.message);
+                        setTimeout(() => {
+                            e.target.innerText = originalText;
+                            e.target.disabled = false;
+                            e.target.style.opacity = "1";
+                            e.target.style.backgroundColor = "var(--primary)";
+                        }, 3000);
+                    }
+                });
+            });
+
+        } catch (error) {
+            console.error(error);
+            pendingRewardsBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="loading-state" style="color: var(--danger);">
+                        Failed to load pending rewards.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
     // Simple counter animation
     function animeCounter(element, target) {
         let current = 0;
@@ -264,9 +372,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bind events
     refreshBtn.addEventListener('click', async () => {
-        await Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes()]);
+        await Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes(), fetchPendingRewards()]);
     });
 
     // Initial load
-    Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes()]);
+    Promise.all([fetchLogs(), fetchDashboardSummary(), fetchTokenLedger(), fetchStakedNodes(), fetchPendingRewards()]);
 });

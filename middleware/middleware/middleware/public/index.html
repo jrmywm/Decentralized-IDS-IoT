@@ -145,6 +145,33 @@
             </div>
         </main>
 
+        <main class="glass-panel ledger-section" style="margin-bottom: 2rem;">
+            <div class="ledger-header">
+                <h2>Optimistic Timelocks (Pending Rewards)</h2>
+            </div>
+            <div class="table-container">
+                <table id="pending-rewards-table">
+                    <thead>
+                        <tr>
+                            <th>Threat Log ID</th>
+                            <th>Trusted Reporter</th>
+                            <th>Timelocked Amount (ISEC)</th>
+                            <th>Unlock Block</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-rewards-body">
+                        <tr>
+                            <td colspan="5" class="loading-state">
+                                <div class="spinner"></div>
+                                <p>Loading pending rewards...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
         <main class="glass-panel ledger-section">
             <div class="ledger-header">
                 <h2>IoTToken Latest Ledger & Dynamic Rewards</h2>

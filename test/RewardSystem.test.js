@@ -29,15 +29,22 @@ describe("Sistem Reward IoT", function () {
 
     // 4. Daftarkan reporter
     await registry.addReporter(reporter.address);
+
+    // 5. Beri reporter token untuk staking
+    await token.transfer(reporter.address, hre.ethers.parseEther("100"));
+    await token.connect(reporter).approve(registryAddress, hre.ethers.parseEther("100"));
   });
 
-  it("Harus mengirim 10 ISEC saat ancaman dilaporkan", async function () {
-    const rewardAmount = hre.ethers.parseEther("10");
+  it("Harus mengirim 25 ISEC saat ancaman dilaporkan", async function () {
+    const rewardAmount = hre.ethers.parseEther("25");
+
+    // Reporter harus stake 100 ISEC terlebih dahulu
+    await registry.connect(reporter).stake(hre.ethers.parseEther("100"));
 
     // Cek saldo awal reporter
     const saldoAwal = await token.balanceOf(reporter.address);
 
-    // Reporter melaporkan ancaman
+    // Reporter melaporkan ancaman level 3 (yang menghasilkan 25 ISEC)
     await registry.connect(reporter).logThreat(
       "192.168.1.1",
       "Brute Force",
