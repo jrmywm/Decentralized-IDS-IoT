@@ -1,5 +1,6 @@
 # Dependency directories
 node_modules/
+.npm-cache/
 jspm_dependencies/
 
 # Hardhat / Solidity artifacts and cache
@@ -20,6 +21,7 @@ bridge.pid
 middleware/bridge.log
 middleware/middleware/bridge.log
 middleware/middleware/middleware/crash_log.txt
+.temp_env
 
 # OS generated files
 .DS_Store

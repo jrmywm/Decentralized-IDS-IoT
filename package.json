@@ -1,17 +1,21 @@
 {
-  "name": "test",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "test": "test"
-  },
+  "name": "decentralized-ids-iot",
+  "version": "2.0.0",
+  "description": "Educational staked threat-consensus registry with signed IoT reporters",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:middleware": "npm --prefix middleware test",
+    "test:agent": "npm --prefix agent test",
+    "test:all": "npm test && npm run test:middleware && npm run test:agent",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "relay": "npm --prefix middleware start",
+    "agent:ssh": "npm --prefix agent run simulate:ssh"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["iot", "ids", "solidity", "security", "education"],
+  "license": "MIT",
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.2",
     "@nomicfoundation/hardhat-ethers": "^3.1.3",

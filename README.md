@@ -1,160 +1,92 @@
-# Decentralized IoT Honeypot & Threat Registry
+# Decentralized IoT Threat Registry
 
-A secure, immutable system for detecting and recording IoT-based cyber threats using a distributed ledger with an automated **ISEC Token** reward mechanism.
+An educational end-to-end prototype showing how independent honeypot reporters can sign observations, relay them to a smart contract, and reach stake-backed consensus. The blockchain is the shared threat registry and incentive layer; detection still happens at the edge.
 
-## Project Overview
-This project implements a **Decentralized Intrusion Detection System (IDS)** designed for IoT environments. By combining a honeypot (simulated vulnerable IoT devices) with a blockchain ledger, it ensures that threat logs are transparent, verifiable, and resistant to tampering.
+This is a portfolio/demo system, not production IDS infrastructure. It uses a demo token, owner-managed reporter enrollment, and owner arbitration for challenged evidence.
 
-### The Problem
-Traditional centralized logging systems are vulnerable: if an attacker compromises the logging server, they can delete or modify evidence of their intrusion to hide their tracks.
+## What is implemented
 
-### The Solution
-By piping threat data through a secure middleware into a **Smart Contract**, every detected attack is permanently etched into the blockchain. Even if the honeypot or middleware is compromised, the historical record of attacks remains immutable and serves as valid digital evidence.
-
-### Key Feature: Crypto-Economic Security (ISEC Token)
-We have introduced the **ISEC (ERC-20)** token to create a robust crypto-economic security model:
-* **Anti-Poisoning Staking:** Nodes must lock a collateral stake of **100 ISEC** to be authorized to report. Malicious nodes can be slashed by admins.
-* **Dynamic Rewards:** To incentivize accurate reporting, the Smart Contract automatically scales rewards based on threat severity (e.g., Level 1 = 5 ISEC, Level 4 Critical = 50 ISEC).
-
-### How the Blockchain Data Storage Works
-Unlike traditional centralized databases (like MySQL or MongoDB), our system stores threat data permanently on the **Ethereum Sepolia** public blockchain (or Polygon).
-
-*   **Smart Contract Storage:** The actual data (Threat logs, Staked Balances, Token Ledgers) is physically stored within the *state variables* of the `ThreatRegistry.sol` and `IoTToken.sol` smart contracts.
-*   **The Network (Polygon/Sepolia):** These smart contracts are deployed to a distributed network of thousands of nodes globally. This means there is no single server to hack. If one node goes down, the data remains perfectly intact across the network.
-*   **The Middleware Connection:** Our Node.js middleware (`bridge.js`) acts as the bridge. It uses the `POLYGON_RPC_URL` (or Sepolia RPC) defined in your `.env` file to securely connect to a public node (like `publicnode.com`). When a threat is detected, the middleware packages the data and sends a cryptographic transaction to the network, permanently etching the data into the public ledger.
-
----
-
-## Architecture
-
-The system consists of three primary layers:
-
-### 1. IoT Layer (The Trigger)
-- **Function**: Simulates a vulnerable device (e.g., ESP32 or Raspberry Pi) that attracts attackers by exposing fake services.
-- **Threat Detection Methods**:
-  - **Port Listening**: Opens common ports (e.g., 22 for SSH, 23 for Telnet). Logs any unauthorized IP attempting to connect as a Port Scanner or Brute-force attack.
-  - **Fake Services**: Runs simulated services (like a fake web login). If an attacker inputs malicious payloads (e.g., `OR 1=1`), the device categorizes it as SQL Injection.
-  - **Automated Trigger**: Once a rule is matched, the device's script instantly constructs the threat data (Attacker IP, Attack Type, Danger Level) into a JSON payload.
-- **Workflow**: Detects a threat $\rightarrow$ Base64 encodes the payload $\rightarrow$ Sends a signed POST request to the Middleware.
-- **Security**: Uses a shared secret token (`x-helium-token`) for authentication.
-
-### 2. Middleware Layer (The Bridge)
-- **Technology**: Node.js, Express, ethers.js.
-- **Role**: Acts as the secure gateway.
-- **Key Features**:
-    - **Auth**: Verifies IoT device tokens.
-    - **Decoding**: Processes Base64 threat payloads.
-    - **Tx Queue**: Implements a transaction queue to prevent nonce collisions on the blockchain.
-    - **API**: Serves threat data to a frontend dashboard.
-
-### 3. Blockchain Layer (The Ledger)
-- **Technology**: Solidity, Hardhat, Polygon/Ethereum.
-- **Contract**: `ThreatRegistry.sol`
-- **Function**: Stores `ThreatLog` structs (Device ID, IP, Attack Type, Severity) permanently.
-- **Access Control**: Only authorized middleware wallets can write to the registry.
-
----
-
-## Getting Started (Demo Guide)
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v16+)
-- [Hardhat](https://hardhat.org/)
-- A compatible Ethereum wallet private key
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/jrmywm/Decentralized-IDS-IoT.git
-   cd Decentralized-IDS-IoT
-   ```
-
-2. **Install Root Dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Install Middleware Dependencies**
-   ```bash
-   cd middleware/middleware/middleware
-   npm install
-   ```
-
-### Configuration
-Create a `.env` file in `middleware/middleware/middleware/` with the following:
-```env
-PORT=3000
-HEC_SECRET_TOKEN=your_secret_token_here
-POLYGON_RPC_URL=http://127.0.0.1:8545
-PRIVATE_KEY=your_wallet_private_key
-CONTRACT_ADDRESS=deployed_registry_address
-TOKEN_CONTRACT_ADDRESS=deployed_token_address
+```text
+JSON honeypot events -> explainable edge detector -> EIP-712 signed report
+  -> authenticated HTTP relay (gas payer only) -> ThreatRegistry
+  -> 3-reporter consensus OR trusted-stake optimistic report
+  -> reward / challenge / delayed withdrawal
 ```
 
-### Running the System
+- Severity is part of the five-minute consensus key, so reporters must agree on IP, attack type, and severity.
+- Each reporter has its own Ethereum key and nonce. The relay cannot change a signed report or make several devices look like independent reporters.
+- Normal confirmation requires three distinct authorized, staked addresses.
+- A reporter with 500 ISEC may submit optimistically; its reward is delayed for 100 blocks.
+- Another sufficiently staked reporter can post a 25 ISEC challenge bond and attach an evidence hash. The demo owner resolves the dispute; the losing side is penalized.
+- Stake withdrawals use a 100-block cooldown. A reporter cannot submit while a withdrawal is pending.
+- Deposited stake is accounted for separately and cannot be spent as rewards.
+- The included detector recognizes repeated SSH login failures and multi-port scans from line-delimited JSON events.
 
-To demonstrate the end-to-end flow, please follow these steps.
+## Repository layout
 
-### Terminal 1: Smart Contract Deployment
-Deploy the contracts to the Sepolia public testnet and fund the reward reserve.
+| Path | Purpose |
+|---|---|
+| `contracts/` | Token and threat registry contracts |
+| `test/` | Hardhat protocol/security tests |
+| `middleware/src/` | Fail-fast, validated HTTP relay |
+| `middleware/test/` | Relay validation tests |
+| `agent/` | Detector, signing agent, simulator, and tests |
+| `scripts/deploy.js` | Local/testnet deployment |
+| `Resources/` | Original project reports |
+
+## Quick start
+
+Requirements: Node.js 20 or newer and npm.
+
 ```bash
-# Navigate to: \Decentralized-IDS-IoT
-npx hardhat run scripts/deploy.js --network sepolia
+npm install
+npm --prefix middleware install
+npm --prefix agent install
+npm run test:all
 ```
-> **Note:** Update your `.env` files with the newly generated contract addresses.
 
-### Terminal 2: Middleware Threat Bridge
-Start the intermediary server that bridges the IoT devices and the Blockchain, and serves the Web3 Dashboard.
+For an interactive local demo, use four terminals:
+
+1. Start the chain: `npm run node`
+2. Deploy: `npm run deploy:local`
+3. Configure and run the relay: copy `middleware/.env.example` to `middleware/.env`, fill in the printed registry address, a Hardhat account private key for `RELAYER_PRIVATE_KEY`, and a random 24+ character API key; then run `npm run relay`.
+4. Configure a sensor: copy `agent/.env.example` to `agent/.env`. Use the private key matching one of the three demo reporter addresses printed by the deployment (the local node prints its development keys), the same registry/API settings, and `CHAIN_ID=31337`.
+
+The local deployment automatically authorizes, funds, and stakes its first three reporter accounts. Public-network deployments should perform those actions explicitly. For a three-node consensus demo, configure and run three sensor identities with different keys and device IDs while feeding each the same simulated source:
+
 ```bash
-# Navigate to: \Decentralized-IDS-IoT\middleware\middleware\middleware
-node bridge.js
+npm run agent:ssh
 ```
 
-### Terminal 3: Setup Node Staking
-Before logging threats, lock 100 ISEC as collateral.
-```bash
-# Navigate to: \Decentralized-IDS-IoT
-npx hardhat run scripts/setup-stake.js --network sepolia
+The simulator emits five failed SSH connections. The detector creates one signed `ssh-bruteforce` report and sends it to `POST /api/v1/reports`.
+
+## Relay API
+
+- `GET /health` — checks RPC connectivity; no secrets or balances are returned.
+- `GET /api/v1/logs` — returns the latest 50 finalized/optimistic registry entries.
+- `POST /api/v1/reports` — requires `Authorization: Bearer <INGEST_API_KEY>` and JSON:
+
+```json
+{
+  "reporter": "0x...",
+  "nonce": 0,
+  "signature": "0x...",
+  "report": {
+    "attackerIP": "203.0.113.44",
+    "attackType": "ssh-bruteforce",
+    "dangerLevel": 3,
+    "deviceId": "honeypot-01",
+    "observedAt": 1789980000
+  }
+}
 ```
 
-### Terminal 4: IoT Simulator
-Simulate a threat detection from an ESP32 device to trigger the dynamic reward logic.
-```bash
-# Navigate to: \Decentralized-IDS-IoT\middleware\middleware\middleware
-node test-webhook.js
-```
+Accepted attack types are `port-scan`, `ssh-bruteforce`, `http-probe`, and `credential-stuffing`. Payloads are capped at 16 KiB and timestamps must be within the contract's freshness window.
 
-### Terminal 5: Verification (Dashboard)
-Verify the dynamic rewards and your staked status visually.
-Open your browser and navigate to `http://localhost:3000`. You will see your node in the **Active Staked Nodes** table and the reward transferred in the **IoTToken Latest Ledger**.
+## Security model and honest limitations
 
----
+Keys and API secrets have no fallback values; startup fails when configuration is absent. Signatures protect reporter identity and report contents, while the bearer key limits unsolicited relay traffic. TLS and rate limiting belong in a reverse proxy for any networked deployment.
 
-## Key Components
+Consensus indicates that distinct enrolled keys agreed, not that an event is objectively true. Owner enrollment can admit Sybil identities. Dispute evidence is stored off-chain and only its hash is committed; owner arbitration is intentionally simple and centralized. IP addresses are public on-chain and should be hashed or otherwise handled under an appropriate privacy policy outside a classroom demo. The contract has tests but no independent audit.
 
-| Component | File Path | Description |
-| :--- | :--- | :--- |
-| Token Contract | contracts/IoTToken.sol | ERC-20 Smart Contract for ISEC tokens (Reward System). |
-| Registry Contract | contracts/ThreatRegistry.sol | Main immutable ledger for logging IoT threats and rewards. |
-| Blockchain Bridge | middleware/middleware/middleware/bridge.js | Secure gateway connecting IoT devices to the Blockchain. |
-| Dashboard | middleware/middleware/middleware/public/ | Frontend Web UI for real-time threat visualization. |
-| Balance Checker | ./checkBalance.cjs | CLI tool to verify on-chain ISEC token balance mutations. |
-| Ledger Explorer | .../explore-ledger.js | Legacy CLI tool to verify on-chain logs via terminal. |
-
----
-
-
-## Dashboard Access
-
-Once the bridge is running, you can monitor the system via the following endpoints:
-
-*   **Real-time Logs API:** `http://localhost:3000/api/logs`
-*   **System Status:** `http://localhost:3000/status`
-*   **Web Dashboard:** `http://localhost:3000/`
-    
----
-
-## Additional Documentation
-- For a step-by-step walkthrough, see [DEMO_GUIDE.md](DEMO_GUIDE.md).
-- For verification steps, see [TESTING.md](TESTING.md).
+See [TESTING.md](TESTING.md) for the verification matrix and [DEMO_GUIDE.md](DEMO_GUIDE.md) for a short presentation script.

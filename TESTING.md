@@ -1,71 +1,35 @@
-# Manual Testing Guide: Decentralized IoT Honeypot & Threat Registry
+# Testing
 
-This guide describes how to manually replicate and verify the end-to-end flow from IoT threat detection to blockchain logging.
+## Run everything
 
-## 🛠 Environment Setup
+```bash
+npm install
+npm --prefix middleware install
+npm --prefix agent install
+npm run test:all
+```
 
-### Prerequisites
-- Node.js installed
-- Hardhat installed (`npm install --save-dev hardhat`)
-- All dependencies installed in the `middleware` folder
+The root command runs three suites:
 
----
+- Hardhat contract tests: severity-aware consensus, three distinct reporters, rewards, EIP-712 relay signatures and replay prevention, delayed unstaking, both dispute outcomes, and separation of stake from reward reserves.
+- Relay tests: strict envelope, IP/severity, and timestamp validation.
+- Detector tests: SSH brute-force and port-scan rules.
 
-## 🚀 Step-by-Step Replication
+Useful narrower commands are `npm test`, `npm run test:middleware`, and `npm run test:agent`. `npm run compile` compiles without running tests.
 
-### Step 1: Launch the Local Blockchain
-The system requires a local Ethereum-compatible node to store the threat registry.
-1. Open a terminal.
-2. Run:
-   ```bash
-   npx hardhat node
-   ```
-3. **Keep this terminal open.** Note the accounts and private keys listed; these are used by the middleware to sign transactions.
+## Manual smoke test
 
-### Step 2: Start the Middleware Bridge
-The bridge acts as the API endpoint for the IoT devices and the client for the smart contract.
-1. Open a second terminal.
-2. Navigate to the middleware directory:
-   ```bash
-   cd middleware
-   ```
-3. Start the bridge:
-   ```bash
-   node bridge.js
-   ```
-4. **Keep this terminal open.** You should see a message indicating the server is running (usually on port 3000).
+1. Run `npm run node` and leave it open.
+2. Run `npm run deploy:local`; record both addresses.
+3. Prepare `middleware/.env` from its example and run `npm run relay`.
+4. `GET http://127.0.0.1:3000/health` should return `ok: true` and chain ID `31337`.
+5. Prepare `agent/.env`, enroll/fund/stake that device address, then run `npm run agent:ssh`.
+6. A single node with 100 ISEC produces a pending observation but no log. Three independently keyed agents observing the same event within the same five-minute bucket create one verified log. A single reporter with 500 ISEC creates an optimistic log instead.
+7. `GET http://127.0.0.1:3000/api/v1/logs` shows resulting logs and numeric status: `0` verified, `1` optimistic, `2` challenged, `3` rejected.
 
-### Step 3: Simulate a LoRaWAN Threat Trigger
-Since the ESP32 is the hardware source, we simulate its output using a `curl` request.
-1. Open a third terminal.
-2. Execute the following command to simulate a high-severity threat:
-   ```bash
-   curl -X POST http://localhost:3000/threat \
-        -H "Content-Type: application/json" \
-        -d '{"deviceId": "ESP32-01", "threatType": "SQL_Injection", "severity": 8, "details": "Suspicious payload detected on LoRaWAN gateway"}'
-   ```
+Expected error checks:
 
----
-
-## ✅ Verification (Success Criteria)
-
-### 1. Middleware Logs (Terminal 2)
-You should see:
-- `[INFO] Received threat from device ESP32-01`
-- `[INFO] Sending threat to blockchain...`
-- `[SUCCESS] Threat logged! Transaction Hash: 0x...`
-
-### 2. Blockchain Node Logs (Terminal 1)
-You should see a transaction event appearing in the logs:
-- A `transaction` block showing a call to the `ThreatRegistry` contract.
-- The transaction status should be `success`.
-
-### 3. Contract State (Optional)
-If you have a Hardhat script for reading the registry, you can verify that the `threats` array now contains the simulated entry.
-
----
-
-## 🚩 Troubleshooting
-- **Bridge Error: "Cannot connect to provider"**: Ensure `npx hardhat node` is running in Terminal 1 before starting the bridge.
-- **404 Not Found**: Ensure you are using the correct endpoint (`/threat`) and the bridge is listening on the port specified in `.env`.
-- **Unauthorized Error**: Ensure the private key in `middleware/.env` matches one of the accounts provided by the Hardhat node.
+- Missing/wrong bearer token: HTTP 401.
+- Invalid IP, unsupported attack type, severity outside 1–4, malformed signature, or stale timestamp: HTTP 400.
+- Reporter nonce differs from chain state: HTTP 409.
+- Signature, authorization, stake, or chain failure: HTTP 502 with no internal error details leaked.

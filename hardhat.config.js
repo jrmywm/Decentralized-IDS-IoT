@@ -2,10 +2,13 @@ require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
 module.exports = {
-  solidity: "0.8.19",
+  solidity: {
+    version: "0.8.19",
+    settings: { optimizer: { enabled: true, runs: 200 }, viaIR: true },
+  },
   networks: {
     hardhat: {
-      chainId: 1337,
+      chainId: 31337,
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",

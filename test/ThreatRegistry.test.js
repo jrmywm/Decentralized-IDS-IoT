@@ -1,218 +1,97 @@
 const { expect } = require("chai");
-const hre = require("hardhat");
+const { ethers, network } = require("hardhat");
 
-describe("ThreatRegistry Crypto-Economic Security", function () {
-  let ThreatRegistry, registry, IoTToken, token, owner, reporter, stranger;
-
-  beforeEach(async function () {
-    const { ethers } = hre;
-    [owner, reporter, stranger] = await ethers.getSigners();
-
-    IoTToken = await ethers.getContractFactory("IoTToken");
-    token = await IoTToken.deploy();
-    await token.waitForDeployment();
-
-    ThreatRegistry = await ethers.getContractFactory("ThreatRegistry");
-    registry = await ThreatRegistry.deploy(await token.getAddress());
-    await registry.waitForDeployment();
-
-    // Setup Token Distribution & Approvals
-    await token.transfer(reporter.address, ethers.parseEther("500"));
-    await token.transfer(await registry.getAddress(), ethers.parseEther("500000")); // Reserve
-    await token.connect(reporter).approve(await registry.getAddress(), ethers.parseEther("500"));
-
-    // Add reporter
-    await registry.addReporter(reporter.address);
+describe("ThreatRegistry", function () {
+  let token, registry, relay, r1, r2, r3, challenger;
+  beforeEach(async () => {
+    [, relay, r1, r2, r3, challenger] = await ethers.getSigners();
+    token = await (await ethers.getContractFactory("IoTToken")).deploy();
+    registry = await (await ethers.getContractFactory("ThreatRegistry")).deploy(await token.getAddress());
+    await token.transfer(await registry.getAddress(), ethers.parseEther("10000"));
+    for (const reporter of [r1, r2, r3, challenger]) {
+      await registry.addReporter(reporter.address);
+      await token.transfer(reporter.address, ethers.parseEther("600"));
+      await token.connect(reporter).approve(await registry.getAddress(), ethers.parseEther("600"));
+      await registry.connect(reporter).stake(ethers.parseEther(reporter === challenger ? "150" : "100"));
+    }
   });
+  async function now() { return (await ethers.provider.getBlock("latest")).timestamp; }
+  async function report(signer, severity = 3, ip = "203.0.113.7", type = "ssh-bruteforce", at) {
+    return registry.connect(signer).logThreat(ip, type, severity, `sensor-${signer.address.slice(-4)}`, at ?? await now());
+  }
 
-  it("Should require staking before logging a threat", async function () {
-    await expect(
-      registry.connect(reporter).logThreat("1.1.1.1", "Scan", 1, "DEV1")
-    ).to.be.revertedWith("ThreatRegistry: Insufficient stake to report");
-
-    // Stake 100 tokens
-    await registry.connect(reporter).stake(ethers.parseEther("100"));
-    expect(await registry.stakedBalances(reporter.address)).to.equal(ethers.parseEther("100"));
-
-    // Now it should work
-    await registry.connect(reporter).logThreat("1.1.1.1", "Scan", 1, "DEV1");
-    expect(await registry.getTotalLogs()).to.equal(1);
-  });
-
-  it("Should dynamically reward based on danger level", async function () {
-    await registry.connect(reporter).stake(ethers.parseEther("100"));
-    
-    const balanceBefore = await token.balanceOf(reporter.address);
-    // Level 1: 5 ISEC
-    await registry.connect(reporter).logThreat("IP", "Scan", 1, "DEV");
-    const balanceAfter1 = await token.balanceOf(reporter.address);
-    expect(balanceAfter1 - balanceBefore).to.equal(ethers.parseEther("5"));
-
-    // Level 4: 50 ISEC
-    await registry.connect(reporter).logThreat("IP", "RCE", 4, "DEV");
-    const balanceAfter4 = await token.balanceOf(reporter.address);
-    expect(balanceAfter4 - balanceAfter1).to.equal(ethers.parseEther("50"));
-  });
-
-  it("Should allow owner to slash a malicious reporter using adminSlash", async function () {
-    await registry.connect(reporter).stake(ethers.parseEther("100"));
-    
-    await registry.adminSlash(reporter.address, ethers.parseEther("50"));
-    expect(await registry.stakedBalances(reporter.address)).to.equal(ethers.parseEther("50"));
-
-    // Reporter now has < 100 staked, should not be able to log
-    await expect(
-      registry.connect(reporter).logThreat("IP", "Fake", 4, "DEV")
-    ).to.be.revertedWith("ThreatRegistry: Insufficient stake to report");
-  });
-
-  it("Should require multiple nodes to reach consensus when threshold > 1", async function () {
-    const { ethers } = hre;
-    const [, , , reporter2, reporter3] = await ethers.getSigners();
-    
-    // Setup additional reporters
-    await registry.addReporter(reporter2.address);
-    await registry.addReporter(reporter3.address);
-    
-    await token.transfer(reporter2.address, ethers.parseEther("500"));
-    await token.transfer(reporter3.address, ethers.parseEther("500"));
-    
-    await token.connect(reporter2).approve(await registry.getAddress(), ethers.parseEther("500"));
-    await token.connect(reporter3).approve(await registry.getAddress(), ethers.parseEther("500"));
-    
-    await registry.connect(reporter).stake(ethers.parseEther("100"));
-    await registry.connect(reporter2).stake(ethers.parseEther("100"));
-    await registry.connect(reporter3).stake(ethers.parseEther("100"));
-    
-    // Update threshold to 3
-    await registry.updateConsensusThreshold(3);
-    
-    // Reporter 1 reports -> No log yet
-    await registry.connect(reporter).logThreat("2.2.2.2", "DDoS", 4, "DEV1");
+  it("validates severity and does not merge severity disagreements", async () => {
+    const at = await now();
+    await report(r1, 2, undefined, undefined, at);
+    await report(r2, 3, undefined, undefined, at);
+    await report(r3, 3, undefined, undefined, at);
     expect(await registry.getTotalLogs()).to.equal(0);
-    
-    // Reporter 2 reports -> No log yet
-    await registry.connect(reporter2).logThreat("2.2.2.2", "DDoS", 4, "DEV2");
-    expect(await registry.getTotalLogs()).to.equal(0);
-    
-    // Reporter 3 reports -> Consensus Reached!
-    await registry.connect(reporter3).logThreat("2.2.2.2", "DDoS", 4, "DEV3");
+    await expect(report(r1, 0, "x", "y", at)).to.be.revertedWith("severity must be 1..4");
+  });
+
+  it("reaches three-reporter consensus and rewards every contributor", async () => {
+    const at = await now(); const before = await token.balanceOf(r1.address);
+    await report(r1, 3, undefined, undefined, at);
+    await report(r2, 3, undefined, undefined, at);
+    await report(r3, 3, undefined, undefined, at);
     expect(await registry.getTotalLogs()).to.equal(1);
-    
-    // Check if rewards were paid (Level 4 = 50 ISEC)
-    // Reporter started with 500, staked 100 (bal=400), earned 50 (bal=450)
-    expect(await token.balanceOf(reporter.address)).to.equal(ethers.parseEther("450"));
-    expect(await token.balanceOf(reporter2.address)).to.equal(ethers.parseEther("450"));
-    expect(await token.balanceOf(reporter3.address)).to.equal(ethers.parseEther("450"));
+    expect((await registry.getLog(0)).status).to.equal(0);
+    expect(await token.balanceOf(r1.address)).to.equal(before + ethers.parseEther("25"));
   });
 
-  it("Should allow DAO to propose and vote to slash a malicious node", async function () {
-    const { ethers } = hre;
-    const [, , , reporter2, reporter3, maliciousNode] = await ethers.getSigners();
-    
-    // Setup maliciousNode
-    await registry.addReporter(maliciousNode.address);
-    await token.transfer(maliciousNode.address, ethers.parseEther("500"));
-    await token.connect(maliciousNode).approve(await registry.getAddress(), ethers.parseEther("500"));
-    await registry.connect(maliciousNode).stake(ethers.parseEther("100"));
-    
-    // Ensure reporter, reporter2, reporter3 are staked (from previous tests setup or do it here)
-    // Actually, in beforeEach only reporter is added.
-    // Let's add them all to be safe.
-    await registry.addReporter(reporter2.address);
-    await registry.addReporter(reporter3.address);
-    
-    await token.transfer(reporter2.address, ethers.parseEther("500"));
-    await token.transfer(reporter3.address, ethers.parseEther("500"));
-    
-    await token.connect(reporter2).approve(await registry.getAddress(), ethers.parseEther("500"));
-    await token.connect(reporter3).approve(await registry.getAddress(), ethers.parseEther("500"));
-    
-    await registry.connect(reporter).stake(ethers.parseEther("100"));
-    await registry.connect(reporter2).stake(ethers.parseEther("100"));
-    await registry.connect(reporter3).stake(ethers.parseEther("100"));
-
-    // Reporter 1 proposes slash against maliciousNode
-    await registry.connect(reporter).proposeSlash(maliciousNode.address, ethers.parseEther("100"));
-    
-    // Currently 1 vote (from proposer). Balance should still be 100.
-    expect(await registry.stakedBalances(maliciousNode.address)).to.equal(ethers.parseEther("100"));
-    
-    // Reporter 2 votes
-    await registry.connect(reporter2).voteOnSlash(0);
-    expect(await registry.stakedBalances(maliciousNode.address)).to.equal(ethers.parseEther("100"));
-    
-    // Reporter 3 votes -> Threshold (3) reached! Slash is automatically executed.
-    await registry.connect(reporter3).voteOnSlash(0);
-    expect(await registry.stakedBalances(maliciousNode.address)).to.equal(0); // 100 ISEC slashed!
+  it("accepts EIP-712 device identities through an untrusted relay and prevents replay", async () => {
+    const observedAt = await now();
+    const domain = { name: "ThreatRegistry", version: "1", chainId: (await ethers.provider.getNetwork()).chainId, verifyingContract: await registry.getAddress() };
+    const types = { ThreatReport: [
+      { name: "attackerIPHash", type: "bytes32" }, { name: "attackTypeHash", type: "bytes32" },
+      { name: "dangerLevel", type: "uint8" }, { name: "deviceIdHash", type: "bytes32" },
+      { name: "observedAt", type: "uint256" }, { name: "nonce", type: "uint256" }
+    ]};
+    const data = ["198.51.100.9", "port-scan", "sensor-alpha"];
+    const value = { attackerIPHash: ethers.id(data[0]), attackTypeHash: ethers.id(data[1]), dangerLevel: 2, deviceIdHash: ethers.id(data[2]), observedAt, nonce: 0 };
+    const signature = await r1.signTypedData(domain, types, value);
+    await registry.connect(relay).submitSignedThreat(r1.address, data[0], data[1], 2, data[2], observedAt, 0, signature);
+    expect(await registry.reportNonces(r1.address)).to.equal(1);
+    await expect(registry.connect(relay).submitSignedThreat(r1.address, data[0], data[1], 2, data[2], observedAt, 0, signature)).to.be.revertedWith("invalid nonce");
   });
 
-  describe("Optimistic Logging (Stake-Weighted Consensus)", function () {
-    it("Should not allow standard stake (100 ISEC) to independently log a targeted attack when threshold > 1", async function () {
-      await registry.updateConsensusThreshold(3);
-      await registry.connect(reporter).stake(ethers.parseEther("100"));
-      
-      const tx = await registry.connect(reporter).logThreat("3.3.3.3", "Targeted", 4, "DEV_T1");
-      await tx.wait();
-      
-      expect(await registry.getTotalLogs()).to.equal(0);
-    });
+  it("enforces delayed unstaking and blocks reports during the delay", async () => {
+    await registry.connect(r1).requestUnstake(ethers.parseEther("100"));
+    await expect(report(r1)).to.be.revertedWith("withdrawal pending");
+    await expect(registry.connect(r1).executeUnstake()).to.be.revertedWith("withdrawal not ready");
+    await network.provider.send("hardhat_mine", ["0x66"]);
+    await registry.connect(r1).executeUnstake();
+    expect(await registry.stakedBalances(r1.address)).to.equal(0);
+  });
 
-    it("Should allow trusted stake (500 ISEC) to optimistically log a targeted attack and pend reward", async function () {
-      await registry.updateConsensusThreshold(3);
-      await registry.connect(reporter).stake(ethers.parseEther("500"));
-      
-      const tx = await registry.connect(reporter).logThreat("4.4.4.4", "Targeted", 4, "DEV_T2");
-      await tx.wait();
-      
-      expect(await registry.getTotalLogs()).to.equal(1);
-      
-      const pending = await registry.pendingRewards(0);
-      expect(pending.reporter).to.equal(reporter.address);
-      expect(pending.amount).to.equal(ethers.parseEther("50")); // Level 4
-    });
+  it("handles a bonded challenge that rejects a false optimistic report", async () => {
+    await registry.connect(r1).stake(ethers.parseEther("400"));
+    await report(r1, 4);
+    await expect(registry.connect(r1).requestUnstake(1)).to.be.revertedWith("optimistic report unresolved");
+    const before = await registry.stakedBalances(challenger.address);
+    await registry.connect(challenger).challengeReport(0, ethers.id("pcap evidence"));
+    expect((await registry.getLog(0)).status).to.equal(2);
+    await registry.resolveChallenge(0, true);
+    expect((await registry.getLog(0)).status).to.equal(3);
+    expect(await registry.stakedBalances(challenger.address)).to.equal(before + ethers.parseEther("25"));
+    await expect(registry.connect(r1).claimReward(0)).to.be.revertedWith("reward unavailable");
+  });
 
-    it("Should allow claiming the timelocked reward after dispute window", async function () {
-      await registry.updateConsensusThreshold(3);
-      await registry.connect(reporter).stake(ethers.parseEther("500"));
-      
-      await registry.connect(reporter).logThreat("5.5.5.5", "Targeted", 4, "DEV_T3");
-      const logId = (await registry.getTotalLogs()) - 1n;
-      
-      // Advance blocks by disputeWindow (100) + 1
-      for (let i = 0; i < 101; i++) {
-        await hre.network.provider.send("evm_mine");
-      }
-      
-      const balanceBefore = await token.balanceOf(reporter.address);
-      await registry.connect(reporter).claimReward(logId);
-      const balanceAfter = await token.balanceOf(reporter.address);
-      
-      expect(balanceAfter - balanceBefore).to.equal(ethers.parseEther("50"));
-    });
+  it("penalizes a failed challenge and releases the optimistic reward after the window", async () => {
+    await registry.connect(r1).stake(ethers.parseEther("400"));
+    await report(r1, 4); const staked = await registry.stakedBalances(r1.address);
+    await registry.connect(challenger).challengeReport(0, ethers.id("weak evidence"));
+    await registry.resolveChallenge(0, false);
+    expect(await registry.stakedBalances(r1.address)).to.equal(staked + ethers.parseEther("25"));
+    await network.provider.send("hardhat_mine", ["0x66"]);
+    const before = await token.balanceOf(r1.address);
+    await registry.connect(r1).claimReward(0);
+    expect(await token.balanceOf(r1.address)).to.equal(before + ethers.parseEther("50"));
+  });
 
-    it("Should forfeit the reward if trusted node is slashed during dispute window", async function () {
-      await registry.updateConsensusThreshold(3);
-      await registry.connect(reporter).stake(ethers.parseEther("500"));
-      
-      await registry.connect(reporter).logThreat("6.6.6.6", "Targeted", 4, "DEV_T4");
-      const logId = (await registry.getTotalLogs()) - 1n;
-      
-      // Slash the reporter by 100 ISEC so they fall to 400 (below 500 threshold)
-      await registry.adminSlash(reporter.address, ethers.parseEther("100"));
-      
-      // Advance blocks
-      for (let i = 0; i < 101; i++) {
-        await hre.network.provider.send("evm_mine");
-      }
-      
-      // Try to claim
-      const tx = await registry.connect(reporter).claimReward(logId);
-      await tx.wait();
-      
-      const pending = await registry.pendingRewards(logId);
-      expect(pending.amount).to.equal(0n); // Forfeited
-    });
+  it("accounts for deposits separately from the reward reserve", async () => {
+    const reserve = await registry.availableRewardReserve();
+    expect(reserve).to.equal(ethers.parseEther("10000"));
+    expect(await token.balanceOf(await registry.getAddress())).to.equal(reserve + await registry.totalStaked());
   });
 });
-

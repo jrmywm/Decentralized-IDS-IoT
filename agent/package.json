@@ -1,0 +1,5 @@
+{
+  "name": "decentralized-ids-agent", "version": "2.0.0", "private": true, "type": "module",
+  "scripts": { "start": "node honeypot-agent.js", "simulate:ssh": "node simulate-events.js | node honeypot-agent.js", "simulate:scan": "node simulate-events.js 203.0.113.44 scan | node honeypot-agent.js", "test": "node --test" },
+  "dependencies": { "dotenv": "^17.4.1", "ethers": "^6.16.0" }
+}
